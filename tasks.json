@@ -223,7 +223,7 @@
       "number": 9,
       "kind": "task",
       "title": "構成図表示とノード状態の色分け",
-      "status": "ready",
+      "status": "in-progress",
       "parent": "1",
       "dependsOn": [
         "api-api-snapshot-api-events",
@@ -236,9 +236,14 @@
       "doneWhen": "見本データで、緑/黄/赤の状態がノードの見た目に反映され、/plugin/scripts実行後の状態変化(disturb→赤、fix→緑)が画面に反映されることを確認できる。",
       "resolution": null,
       "refs": [],
-      "threads": [],
+      "threads": [
+        {
+          "projectId": "81b644b5-62e7-4e30-89f6-7f68ccf39742",
+          "threadId": "81c59ff7-31c9-48fb-ba57-805dbbfcb608"
+        }
+      ],
       "createdAt": "2026-10-28T09:17:43.599Z",
-      "updatedAt": "2026-10-28T09:17:43.599Z",
+      "updatedAt": "2026-10-28T11:11:31.551Z",
       "closedAt": null,
       "extra": {}
     },
