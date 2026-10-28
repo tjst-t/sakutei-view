@@ -93,7 +93,7 @@
       "number": 4,
       "kind": "task",
       "title": "Sakuteiデータソース",
-      "status": "ready",
+      "status": "done",
       "parent": "1",
       "dependsOn": [
         "https-ca-bearer"
@@ -103,12 +103,12 @@
       "labels": [],
       "body": "internal/source/sakutei/ を実装。/status /plan /graph のポーリングと/eventsのSSE購読(Last-Event-ID対応)を行う。Sakutei本体のJSON形はgithub.com/tjst-t/sakuteiのv2.0.1タグのdocsと実装をcloneして確認し合わせる。",
       "doneWhen": "手元で動かした模擬Sakutei(--read-listen相当のモック)に対して、status/plan/graphの取得とeventsの購読が行え、内部構造体に正しく変換されることを確認できる。",
-      "resolution": null,
+      "resolution": "internal/source/sakutei を実装(client.go/sse.go/types.go)。GET /status, /plan, /graph と /events(SSE、firing再送・dropped通知対応。Sakutei側は履歴を持たないためLast-Event-IDでの再開は無い)を実装。JSON形はtjst-t/sakuteiの公開v2.5.0タグのdocs(read-api.md/status-json.md/plan-json.md)とpkg/core/event.goのJSONタグを確認して合わせた(コードは参照のみ、転用なし)。それらのdocsに基づくfixtureで単体テスト済み(status/plan/graphのデコード、503のNotYet判定、firing→resolvedとdropped通知を含むイベント購読)。コミット7565a8c、main push済み。",
       "refs": [],
       "threads": [],
       "createdAt": "2026-10-28T09:17:43.599Z",
-      "updatedAt": "2026-10-28T09:52:20.230Z",
-      "closedAt": null,
+      "updatedAt": "2026-10-28T10:02:33.263Z",
+      "closedAt": "2026-10-28T10:02:33.263Z",
       "extra": {}
     },
     {
