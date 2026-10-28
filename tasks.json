@@ -144,7 +144,7 @@
       "number": 6,
       "kind": "task",
       "title": "aggregator(3ソースの統合)",
-      "status": "in-progress",
+      "status": "done",
       "parent": "1",
       "dependsOn": [
         "containerlab",
@@ -156,7 +156,7 @@
       "labels": [],
       "body": "internal/aggregate/ を実装。containerlab/Sakutei/差し込み口の3ソースを内部イベントバスに正規化する。ノードの状態色分け(ok/drifted/ApplyFailed等)の判定ロジックをここに持つ。",
       "doneWhen": "3つのデータソースのモック(固定JSON+example-plugin)を与えたとき、統合済みのスナップショットとイベントストリームが期待通りの形で得られることを確認できる。",
-      "resolution": null,
+      "resolution": "internal/aggregate/ を実装。containerlab(トポロジ・生死)・Sakutei(GET /status)・device pluginのGET /plugin/statusを1つのSnapshotに統合し、ノードの色分け(ok/drift/apply_failed/unobservable/unmanaged/workflow/down/unknown)を決めるロジックを実装。マッチングの取り決め(Sakuteiのlocal_id=ノード名、pluginはResource.nodeをそのまま使用)を明文化。/events と /plugin/events を並行購読して1本のイベントストリームに正規化するAggregator.Eventsも実装。3ソースの固定JSONモックによる単体テストでスナップショットとイベントストリームの統合を確認。全テスト通過、gofmt/go vet済み。コミットa97ff34をmainにpush済み。",
       "refs": [],
       "threads": [
         {
@@ -165,8 +165,8 @@
         }
       ],
       "createdAt": "2026-10-28T09:17:43.599Z",
-      "updatedAt": "2026-10-28T10:12:47.268Z",
-      "closedAt": null,
+      "updatedAt": "2026-10-28T10:15:38.126Z",
+      "closedAt": "2026-10-28T10:15:38.126Z",
       "extra": {}
     },
     {
