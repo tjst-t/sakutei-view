@@ -103,7 +103,15 @@ go build ./cmd/sakutei-view
 CONTAINERLAB_SOURCE=plugin PLUGIN_BASE_URL=http://127.0.0.1:8081 ./sakutei-view
 ```
 
-(The web UI build step will be documented once the frontend is in place.)
+## Web UI
+
+The browser-facing page lives under [web/](web/) (React + TypeScript + Vite +
+Cytoscape.js) and talks only to this binary's `/api/snapshot` and
+`/api/events`. See [web/README.md](web/README.md) for its own dev workflow
+(`npm install && npm run dev`, proxied to a `go run ./cmd/sakutei-view`
+instance). It is not embedded into the Go binary yet — that lands with
+Backlog's `embed` task, once the topology diagram, dependency DAG, and event
+timeline it depends on are built.
 
 ## License
 

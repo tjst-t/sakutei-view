@@ -1,0 +1,67 @@
+:root {
+  color-scheme: dark;
+
+  /* ---- palette -----------------------------------------------------
+   * A dark operations-console surface, not a themed "dark mode" of a
+   * light design: sakutei-view's whole audience reads it next to a
+   * terminal. Status colors are not decoration — they are the same
+   * ok/drift/down vocabulary the backend's aggregate.Color type uses,
+   * so the palette *is* the legend.
+   */
+  --bg: #0d1013;
+  --surface: #151a1e;
+  --surface-raised: #1b2227;
+  --border: #262f35;
+  --text: #e4e9ec;
+  --text-muted: #8b969d;
+  --text-faint: #5a656b;
+
+  --status-ok: #39d98a;
+  --status-drift: #e3b341;
+  --status-down: #e5534b;
+  --status-progress: #4fa3e3;
+  --status-neutral: #6c7881;
+
+  --font-ui: -apple-system, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+  --font-mono: ui-monospace, 'Cascadia Code', 'SFMono-Regular', 'Roboto Mono',
+    Consolas, monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+code,
+pre,
+.mono {
+  font-family: var(--font-mono);
+}
+
+button {
+  font: inherit;
+  color: inherit;
+}
+
+a {
+  color: var(--status-progress);
+}
+
+::selection {
+  background: color-mix(in srgb, var(--status-progress) 35%, transparent);
+}
