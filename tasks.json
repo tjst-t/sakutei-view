@@ -272,6 +272,27 @@
       "updatedAt": "2026-10-28T09:17:43.599Z",
       "closedAt": null,
       "extra": {}
+    },
+    {
+      "id": "https-ca-bearer",
+      "number": 13,
+      "kind": "task",
+      "title": "外部接続の共通設定(HTTPS/CA指定/Bearerトークン)",
+      "status": "backlog",
+      "parent": "1",
+      "dependsOn": [],
+      "milestone": null,
+      "priority": "high",
+      "labels": [],
+      "body": "## なぜ\n外へ読みに行く3つの口(containerlabの口、差し込み口、観測対象の読み取りAPI)は、それぞれ TLS と読み取り専用の Bearer トークンで保護されることがある。sakutei-view 側で、各接続ごとに次の設定を持てるようにする。\n\n- 宛先 URL(https を受けられる)\n- Bearer トークン。設定ファイルに値を直書きしない。ファイルのパス、または環境変数名で渡せる。\n- 信頼する CA のファイルパス(省略時は OS の信頼ストアを使う)。\n\nTLS 検証を無効化するオプション(insecure-skip-verify 相当)は作らない。自前 CA を指定する形だけをサポートする。\n\n## やること\n- `internal/httpclient`(仮)に、上記3設定から `*http.Client` と Authorization ヘッダ付与を組み立てる共通のビルダーを作る。\n- CA ファイル指定時は `x509.NewCertPool()` に読み込んで `tls.Config.RootCAs` に設定。未指定時は `RootCAs: nil`(OS 標準プールを使う)。\n- Bearer トークンはリクエストの `Authorization: Bearer <token>` ヘッダに乗せる round tripper として実装し、通常の HTTP フェッチにも SSE (Server-Sent Events) の長時間接続にも使えるようにする。\n- 後続の各データソース(containerlabデータソース、Sakuteiデータソース、差し込み口クライアント)はこの共通設定を使って接続する。\n\n## 確かめ方\n単体テストで、ローカルに立てた試験用の httptest.Server(TLS、自前の試験用 CA で署名した証明書)に対して、\n1. 試験用 CA を指定した場合に HTTPS の取得と SSE のストリーミングが両方成功すること\n2. CA を指定しない場合に証明書検証エラーで失敗すること\nの両方を確認する。",
+      "doneWhen": "単体テストで、試験用CAを指定したときはHTTPS取得・SSE購読が成功し、CAを指定しないときは証明書検証で失敗することの両方が確認できる。",
+      "resolution": null,
+      "refs": [],
+      "threads": [],
+      "createdAt": "2026-10-28T09:51:59.624Z",
+      "updatedAt": "2026-10-28T09:51:59.624Z",
+      "closedAt": null,
+      "extra": {}
     }
   ]
 }
