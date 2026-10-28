@@ -372,7 +372,7 @@
       "number": 16,
       "kind": "task",
       "title": "差し込み口アクションのバックエンド配線(scripts/actions/runs)とBasic認証ゲート",
-      "status": "in-progress",
+      "status": "done",
       "parent": "2",
       "dependsOn": [],
       "milestone": null,
@@ -380,7 +380,7 @@
       "labels": [],
       "body": "internal/api/api.goにGET /api/scripts・POST /api/actions/{scriptID}/{action}・GET /api/runs/{runID}を追加し、plugin.Clientへプロキシする。これらのルートはPlugin(差し込み口)が設定済み かつ Basic認証(BasicAuthUser/Password)が設定済みのときだけ登録する(どちらか欠けていれば登録せず404のまま=読むだけ)。GET /api/snapshotのレスポンスにactions_enabled(bool)を追加し、フロントエンドが操作欄の表示可否を判定できるようにする。internal/source/plugin/client.goにStatusCodeOf(err)ヘルパーを追加し、Run取得時の404等を適切なHTTPステータスで返す。",
       "doneWhen": "go test ./internal/api/...が通り、Basic認証未設定時はPOST /api/actions/...とGET /api/scripts・/api/runs/*が404になること、設定済み時はexample-plugin相手にscripts一覧取得・action実行(202)・2回目の409(reason/busy_by)・run状態取得が一通り動くことを実機(curl)で確認する。",
-      "resolution": null,
+      "resolution": "実装・実機検証・push完了(コミット37dbd7e)。internal/api/api.goにGET /api/scripts・POST /api/actions/{scriptID}/{action}・GET /api/runs/{runID}を追加し、Server.Plugin(*plugin.Client)とBasic認証が両方設定されているときだけRegisterRoutesで登録(未設定時はルート自体を登録しない=素の404)。GET /api/snapshotにactions_enabled真偽値を追加。internal/source/plugin/client.goにStatusCodeOf(err)を追加し、plugin側の404等のステータスをそのまま転送(既定502にしない)。cmd/sakutei-view/main.goの既存pluginClientをapi.Server.Pluginに配線。go test ./...通過。実機確認:example-plugin+sakutei-viewバイナリに対しcurlで、(a)プラグイン設定済みだがBasic認証未設定時はGET /api/scripts・POST /api/actions/...・GET /api/runs/*が404になること、(b)Basic認証設定済み時はscripts一覧取得・action実行で202+run_id・同一スクリプトへの2回目のPOSTで409+reason+busy_by:\"run\"・GET /api/runs/{id}で200+status、未知run_idで404が転送されること、を確認した。",
       "refs": [],
       "threads": [
         {
@@ -389,8 +389,8 @@
         }
       ],
       "createdAt": "2026-10-28T12:04:58.296Z",
-      "updatedAt": "2026-10-28T12:05:05.564Z",
-      "closedAt": null,
+      "updatedAt": "2026-10-28T12:12:55.958Z",
+      "closedAt": "2026-10-28T12:12:55.958Z",
       "extra": {}
     },
     {
