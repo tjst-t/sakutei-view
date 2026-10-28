@@ -398,7 +398,7 @@
       "number": 17,
       "kind": "task",
       "title": "操作パネルUI(台本選択・ずらす/直す・runステータス表示)",
-      "status": "in-progress",
+      "status": "done",
       "parent": "2",
       "dependsOn": [
         "actions-backend"
@@ -408,7 +408,7 @@
       "labels": [],
       "body": "web/にOperationsPanelコンポーネントを追加。snapshotのactions_enabledがtrueのときだけ表示。GET /api/scriptsで台本一覧を取得し、各actionのボタンを表示。クリックでPOST /api/actions/{scriptID}/{action}を呼び、202ならrun_idをGET /api/runs/{run_id}でポーリングして終端状態(succeeded/failed/rejected/cancelled/未知)まで表示、409ならreason・busy_byを表示する。同時に1つの操作しか走らせられないよう、実行中はボタンを無効化する。構成図の色変化と出来事ログは既存のsnapshotポーリング/SSEでそのまま反映される想定で、追加の配線は作らない。",
       "doneWhen": "example-plugin+実物Goバックエンド+ブラウザで、台本を選び「ずらす」を押すと構成図のstorage01ノードが赤くなりイベントログにDisturbedが流れ、runステータスがsucceededになることを確認する。続けて「直す」を押すと元のok色に戻りFixedイベントが流れることを確認する。連打で2回目のクリックが409として扱われreason/busy_byが表示されることも確認する。Basic認証を設定していないバックエンドではOperationsPanelが表示されないことも確認する。npm run build/lintが通ること。",
-      "resolution": null,
+      "resolution": "実装・実機検証・push完了(コミット67e37ec)。\n\n実装: web/src/api/types.tsにPluginScript/PluginScriptsResponse/PluginActionResult/PluginRun型とrunIsInProgress()、actions_enabledフィールドを追加。web/src/api/client.tsにfetchScripts/runAction/fetchRunとApiError(409のreason/busy_byを保持)を追加。web/src/components/colors.tsにrunStatusColor/runStatusLabelを追加。新規web/src/components/OperationsPanel.tsx(台本選択・アクション実行・runステータスをGET /api/runs/{id}でポーリング・409時にreason/busy_byを表示する会話バナー)。web/src/App.tsxにOperations節を追加し、snapshot.actions_enabledで出し分け(バックエンドのゲートと対称、無効時はパネルごと存在しない)。\n\n実機検証: example-plugin(実物) + 最小のモックclab-api-server(.verify-tmp/mock-clab-api.py、node名\"storage01\"の起動中ノードを1件返す。example-plugin のハードコードされたdemo-storage-01リソースのNodeフィールドと一致させるため新規作成) + 実物Goバックエンド(CONTAINERLAB_SOURCE=clab-api) + 実物Vite dev server + 実ブラウザで、\n- 台本を選び「Disturb」を押すとstorage01がDrift色(amber、既存の配色)に変わり、runステータスがSucceededになり、Live eventsにDisturbedが流れることを確認。\n- 別タブで最初のrunがまだ進行中のうちに「Disturb」を押すと実際に409が返り、「Already running(another run): another run is already in progress」のreason/busy_by表示を確認。\n- 「Fix」を押すとstorage01がOK(緑)に戻りFixedイベントが流れることを確認。\n- BASIC_AUTH_USER/PASSWORDを設定しないバックエンド(actions_enabled: false)ではOperations節自体が描画されないことを確認。\n\ngo build/vet/test・gofmtは影響なし(Go変更なし)。npm run lintは0 warnings/0 errors、npm run buildは成功。\n\npush前チェック:秘密・社内情報・使う側の名前のgrepはヒットなし、git merge-base --is-ancestorでfast-forward確認済み、author/committerはtjst-t <463015+tjst-t@users.noreply.github.com>。\n\n段(2)「デモ操作」はこれでactions-backend・actions-uiとも完了。",
       "refs": [],
       "threads": [
         {
@@ -417,8 +417,8 @@
         }
       ],
       "createdAt": "2026-10-28T12:04:58.296Z",
-      "updatedAt": "2026-10-28T12:13:06.292Z",
-      "closedAt": null,
+      "updatedAt": "2026-10-28T12:26:52.375Z",
+      "closedAt": "2026-10-28T12:26:52.375Z",
       "extra": {}
     }
   ]
