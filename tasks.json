@@ -1,0 +1,27 @@
+{
+  "format": "banto-backlog/1",
+  "milestones": [],
+  "items": [
+    {
+      "id": "1",
+      "number": 1,
+      "kind": "story",
+      "title": "段(1) 読むだけの画面",
+      "status": "backlog",
+      "parent": null,
+      "dependsOn": [],
+      "milestone": null,
+      "priority": "high",
+      "labels": [],
+      "body": "containerlab・Sakutei・差し込み口(プラグイン)の3つのHTTPソースを束ね、構成図・ノード状態・Sakuteiの状態要約・依存DAG(波)・出来事タイムラインを1画面で見せる読み取り専用のビュー。書き込み操作は無し。\n\n設計の前提(タイガマネージャー決定、Memory参照):\n- 独立したGo単一バイナリ + React/TS/Cytoscape.js(embed同梱)\n- containerlabのデータ取得は差し替え可能(clab-api-server / 差し込み口のGET /plugin/topology)\n- v1は環境1つのみ(containerlab1つ・Sakutei1つ)\n- 認証: 見る側は既定localhost・無認証(Basic設定可)、外部呼び出しはBearer\n- 差し込み口の契約はdocs/plugin-contract.md(v0.1)に確定済み、examples/example-pluginに見本実装済み\n- 確かめるときは手元の模擬Sakutei・固定の見本JSON・example-pluginだけを使う(本物の検証環境にはまだ繋がない)",
+      "doneWhen": "ブラウザでsakutei-viewの画面を開くと、見本データ(模擬Sakutei+example-plugin+固定containerlab JSON)に基づいて構成図・ノード状態の色分け・Sakuteiサマリー・依存DAG(波)・出来事タイムライン(SSE)が表示される。go build ./...が通り、mainブランチにpush済み。",
+      "resolution": null,
+      "refs": [],
+      "threads": [],
+      "createdAt": "2026-10-28T09:17:05.392Z",
+      "updatedAt": "2026-10-28T09:17:05.392Z",
+      "closedAt": null,
+      "extra": {}
+    }
+  ]
+}
