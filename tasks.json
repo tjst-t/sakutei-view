@@ -174,7 +174,7 @@
       "number": 7,
       "kind": "task",
       "title": "バックエンドAPI(/api/snapshot, /api/events)",
-      "status": "in-progress",
+      "status": "done",
       "parent": "1",
       "dependsOn": [
         "aggregator-3"
@@ -184,7 +184,7 @@
       "labels": [],
       "body": "internal/api/ を実装。ブラウザ向けの初期スナップショット用REST(/api/snapshot)と、以後の差分配信用SSE(/api/events)を提供する。既定でlocalhostのみ待ち受け、設定でBasic認証を追加できるようにする。",
       "doneWhen": "cmd/sakutei-viewを起動し、/api/snapshotと/api/eventsがaggregatorの内容を正しく返すことをcurl等で確認できる。",
-      "resolution": null,
+      "resolution": "internal/api/ を実装し、コミット126e430でpush済み。\n\n- GET /api/snapshot: aggregate.Snapshotをnodes[].colorを付与してJSON化して返す\n- GET /api/events: aggregate.Aggregator.Eventsをtext/event-streamで配信するSSEエンドポイント\n- BASIC_AUTH_USER/PASSWORD(_FILE)を設定した場合のみ有効になるHTTP Basic認証(crypto/subtle使用)\n- cmd/sakutei-viewを環境変数駆動の設定に全面書き換え、api.Serverを配線。既定ではLISTEN_ADDR=127.0.0.1:8080でlocalhostのみ待ち受け\n\n確認方法: 実際にビルドしたsakutei-view/example-plugin/clab-api-server互換モックを起動し、\n- curl /api/snapshot で、clab-api互換モックの2ノード・1リンクが正しいフィールド(name/kind/image/state/ipv4/owner/group)とcolorで返ることを確認\n- curl /api/events で、example-pluginのdisturb/fixアクションが発火したイベントがSSEとして正しく中継される(source/time/kind/state/resource/message、バックログ込み)ことを確認\nの両方を実機で確認済み。単体テスト(internal/api)も全てpass。",
       "refs": [],
       "threads": [
         {
@@ -193,8 +193,8 @@
         }
       ],
       "createdAt": "2026-10-28T09:17:43.599Z",
-      "updatedAt": "2026-10-28T10:18:11.842Z",
-      "closedAt": null,
+      "updatedAt": "2026-10-28T10:27:56.634Z",
+      "closedAt": "2026-10-28T10:27:56.634Z",
       "extra": {}
     },
     {
