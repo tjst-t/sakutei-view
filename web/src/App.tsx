@@ -5,6 +5,7 @@ import type { LiveEvent, Snapshot } from './api/types'
 import { DependencyWaves } from './components/DependencyWaves'
 import { EventLog } from './components/EventLog'
 import { NodeList } from './components/NodeList'
+import { OperationsPanel } from './components/OperationsPanel'
 import { SakuteiSummaryPanel } from './components/SakuteiSummaryPanel'
 import { SourceHealthPanel } from './components/SourceHealthPanel'
 import { StatusDot } from './components/StatusDot'
@@ -139,6 +140,20 @@ export default function App() {
               <Loading />
             )}
           </section>
+
+          {snapshot?.actions_enabled && (
+            <section
+              style={{
+                background: 'var(--surface)',
+                border: '1px solid var(--border)',
+                borderRadius: 6,
+                padding: 16,
+              }}
+            >
+              <h2 style={sectionTitle}>Operations</h2>
+              <OperationsPanel />
+            </section>
+          )}
 
           <section
             style={{

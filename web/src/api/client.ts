@@ -1,4 +1,10 @@
-import type { LiveEvent, Snapshot } from './types'
+import type {
+  LiveEvent,
+  PluginActionResult,
+  PluginRun,
+  PluginScriptsResponse,
+  Snapshot,
+} from './types'
 
 /** Thrown by fetchSnapshot when the backend answers with a non-2xx status. */
 export class SnapshotError extends Error {
@@ -18,6 +24,58 @@ export async function fetchSnapshot(signal?: AbortSignal): Promise<Snapshot> {
     throw new SnapshotError(res.status, await res.text())
   }
   return (await res.json()) as Snapshot
+}
+
+/** Thrown by fetchScripts/fetchRun when the backend answers with a
+ * non-2xx status (runAction below handles its own 202/409 instead, since
+ * 409 is an expected outcome rather than a failure). */
+export class ApiError extends Error {
+  status: number
+
+  constructor(path: string, status: number, body: string) {
+    super(`${path} failed: ${status} ${body}`.trim())
+    this.name = 'ApiError'
+    this.status = status
+  }
+}
+
+/** Fetches the plugin's available demo scripts from GET /api/scripts. */
+export async function fetchScripts(signal?: AbortSignal): Promise<PluginScriptsResponse> {
+  const res = await fetch('/api/scripts', { signal })
+  if (!res.ok) {
+    throw new ApiError('/api/scripts', res.status, await res.text())
+  }
+  return (await res.json()) as PluginScriptsResponse
+}
+
+/**
+ * Starts (or reports the conflict of) a plugin run via
+ * POST /api/actions/{scriptID}/{action}. Unlike fetchScripts/fetchRun, a
+ * non-accepted result (409 Conflict, carrying reason/busy_by) is a normal
+ * return value here, not a thrown error — only a genuine transport/server
+ * failure throws.
+ */
+export async function runAction(
+  scriptId: string,
+  action: string,
+  signal?: AbortSignal,
+): Promise<PluginActionResult> {
+  const path = `/api/actions/${encodeURIComponent(scriptId)}/${encodeURIComponent(action)}`
+  const res = await fetch(path, { method: 'POST', signal })
+  if (res.status !== 202 && res.status !== 409) {
+    throw new ApiError(path, res.status, await res.text())
+  }
+  return (await res.json()) as PluginActionResult
+}
+
+/** Fetches one run's current status from GET /api/runs/{runID}. */
+export async function fetchRun(runId: string, signal?: AbortSignal): Promise<PluginRun> {
+  const path = `/api/runs/${encodeURIComponent(runId)}`
+  const res = await fetch(path, { signal })
+  if (!res.ok) {
+    throw new ApiError(path, res.status, await res.text())
+  }
+  return (await res.json()) as PluginRun
 }
 
 export type EventStreamStatus = 'connecting' | 'open' | 'closed'

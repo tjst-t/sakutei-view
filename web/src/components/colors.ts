@@ -51,6 +51,46 @@ export function statusColorHex(color: NodeColor): string {
   }
 }
 
+/**
+ * Maps a plugin.Run.status (running/succeeded/failed/rejected/cancelled,
+ * contract v0.2, plus any value a future contract version adds) to the
+ * same five-color status vocabulary used everywhere else in this view.
+ */
+export function runStatusColor(status: string): string {
+  switch (status) {
+    case 'running':
+      return 'var(--status-progress)'
+    case 'succeeded':
+      return 'var(--status-ok)'
+    case 'failed':
+    case 'rejected':
+    case 'cancelled':
+      return 'var(--status-down)'
+    default:
+      return 'var(--status-neutral)'
+  }
+}
+
+/** Human label for a plugin.Run.status; falls back to the raw value for a
+ * status this view does not recognize, so a future contract version's new
+ * status still reads as something rather than a blank. */
+export function runStatusLabel(status: string): string {
+  switch (status) {
+    case 'running':
+      return 'Running'
+    case 'succeeded':
+      return 'Succeeded'
+    case 'failed':
+      return 'Failed'
+    case 'rejected':
+      return 'Rejected'
+    case 'cancelled':
+      return 'Cancelled'
+    default:
+      return status || 'Unknown'
+  }
+}
+
 export function statusLabel(color: NodeColor): string {
   switch (color) {
     case 'ok':

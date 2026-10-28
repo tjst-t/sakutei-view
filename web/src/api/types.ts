@@ -116,6 +116,10 @@ export interface Snapshot {
   sakutei_stop_reasons?: StopReason[]
   sakutei_graph?: SakuteiGraph
   health: Record<SourceName, SourceHealth>
+  /** Whether POST /api/actions/... and friends are available on this
+   * deployment (a plugin and Basic auth are both configured). When false,
+   * the frontend must not render an operations panel at all. */
+  actions_enabled: boolean
 }
 
 /** aggregate.EventSource */
@@ -130,4 +134,50 @@ export interface LiveEvent {
   state?: string
   resource?: string
   message: string
+}
+
+/** plugin.Script */
+export interface PluginScript {
+  id: string
+  label: string
+  description?: string
+  actions: string[]
+}
+
+/** plugin.ScriptsResponse, the body of GET /api/scripts */
+export interface PluginScriptsResponse {
+  scripts: PluginScript[]
+}
+
+/**
+ * plugin.ActionResult, the body of POST /api/actions/{scriptID}/{action}
+ * for both the 202 Accepted and 409 Conflict cases.
+ */
+export interface PluginActionResult {
+  accepted: boolean
+  run_id?: string
+  reason?: string
+  busy_by?: string
+}
+
+/**
+ * plugin.Run, the body of GET /api/runs/{runID}. status is intentionally a
+ * plain string, not a closed union: the contract documents
+ * running/succeeded/failed/rejected/cancelled, but a future contract
+ * version may add more, and a value this view does not recognize should
+ * render as an unknown, terminal state rather than erroring.
+ */
+export interface PluginRun {
+  run_id: string
+  script_id: string
+  action: string
+  status: string
+  started_at: string
+  finished_at?: string | null
+  message?: string
+}
+
+/** Whether a PluginRun.status represents a run that is still going. */
+export function runIsInProgress(status: string): boolean {
+  return status === 'running'
 }
