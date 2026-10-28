@@ -70,7 +70,7 @@
       "number": 3,
       "kind": "task",
       "title": "containerlabデータソース(差し替え可能)",
-      "status": "ready",
+      "status": "in-progress",
       "parent": "1",
       "dependsOn": [
         "https-ca-bearer"
@@ -82,9 +82,14 @@
       "doneWhen": "固定の見本JSON(clab-api-server形式、または/plugin/topology形式)を与えたとき、ノード一覧・リンク一覧・ノード状態を正しくパースしたGoの構造体が得られることを単体テストで確認できる。",
       "resolution": null,
       "refs": [],
-      "threads": [],
+      "threads": [
+        {
+          "projectId": "81b644b5-62e7-4e30-89f6-7f68ccf39742",
+          "threadId": "81c59ff7-31c9-48fb-ba57-805dbbfcb608"
+        }
+      ],
       "createdAt": "2026-10-28T09:17:43.599Z",
-      "updatedAt": "2026-10-28T09:52:11.700Z",
+      "updatedAt": "2026-10-28T10:07:53.573Z",
       "closedAt": null,
       "extra": {}
     },
