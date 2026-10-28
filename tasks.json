@@ -97,7 +97,9 @@
       "title": "差し込み口クライアント",
       "status": "ready",
       "parent": "1",
-      "dependsOn": [],
+      "dependsOn": [
+        "https-ca-bearer"
+      ],
       "milestone": null,
       "priority": "normal",
       "labels": [],
@@ -107,7 +109,7 @@
       "refs": [],
       "threads": [],
       "createdAt": "2026-10-28T09:17:43.599Z",
-      "updatedAt": "2026-10-28T09:17:43.599Z",
+      "updatedAt": "2026-10-28T09:52:33.543Z",
       "closedAt": null,
       "extra": {}
     },
