@@ -27,6 +27,7 @@ package aggregate
 
 import (
 	"context"
+	"sort"
 	"sync"
 	"time"
 
@@ -495,27 +496,39 @@ func buildStopReasons(status *sakutei.StatusResponse, plan *sakutei.PlanResponse
 }
 
 // buildGraph converts Sakutei's /graph response into a SakuteiGraph grouped
-// by wave, using GraphResponse.Waves for wave membership/order and
+// by wave, using each GraphResponse.Nodes[].Wave for wave membership and
 // GraphResponse.Nodes for each resource's ready/waiting_for detail.
+//
+// This deliberately does not join against GraphResponse.Waves (the
+// [][]string list of per-wave members): per Sakutei's docs/read-api.md,
+// those strings are each node's local_id, not its full id (local_id is
+// only unique within a provider+scope, not globally), while the rest of
+// this view keys resources by the full id. Grouping by Nodes[].Wave
+// directly avoids relying on a cross-provider-unique local_id and matches
+// Wave's own documented meaning ("this node's index into Waves").
+// External nodes (Wave -1, observed only as an upstream owner, never
+// applied locally) are omitted rather than collected into a synthetic
+// extra wave.
 func buildGraph(g sakutei.GraphResponse) *SakuteiGraph {
-	byID := make(map[string]sakutei.GraphNode, len(g.Nodes))
-	for _, n := range g.Nodes {
-		byID[n.ID] = n
+	numWaves := len(g.Waves)
+	waves := make([][]GraphNode, numWaves)
+	for i := range waves {
+		waves[i] = []GraphNode{}
 	}
-	waves := make([][]GraphNode, len(g.Waves))
-	for i, ids := range g.Waves {
-		nodes := make([]GraphNode, 0, len(ids))
-		for _, id := range ids {
-			n := byID[id]
-			nodes = append(nodes, GraphNode{
-				ID:         n.ID,
-				Wave:       n.Wave,
-				Ready:      n.Ready,
-				WaitingFor: n.WaitingFor,
-				External:   n.External,
-			})
+	for _, n := range g.Nodes {
+		if n.External || n.Wave < 0 || n.Wave >= numWaves {
+			continue
 		}
-		waves[i] = nodes
+		waves[n.Wave] = append(waves[n.Wave], GraphNode{
+			ID:         n.ID,
+			Wave:       n.Wave,
+			Ready:      n.Ready,
+			WaitingFor: n.WaitingFor,
+			External:   n.External,
+		})
+	}
+	for i := range waves {
+		sort.Slice(waves[i], func(a, b int) bool { return waves[i][a].ID < waves[i][b].ID })
 	}
 	return &SakuteiGraph{Waves: waves}
 }

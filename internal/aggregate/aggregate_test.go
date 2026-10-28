@@ -62,6 +62,12 @@ const sakuteiPlanFixture = `{
   ]
 }`
 
+// The nodes' local_id ("leaf1"/"spine1") is deliberately different from
+// their full id ("res-leaf1"/"res-spine1") here, and "waves"/"edges"/
+// "waiting_for" below use local_id -- matching Sakutei's actual wire format
+// (docs/read-api.md: "waves" lists each wave's members by local_id, not
+// by the full id). A fixture where id and local_id happened to coincide
+// would not have caught the local_id/id mismatch bug this guards against.
 const sakuteiGraphFixture = `{
   "schema_version": 1,
   "generated_at": "2026-10-28T00:00:00Z",
@@ -69,12 +75,12 @@ const sakuteiGraphFixture = `{
     {"id": "res-leaf1", "provider": "containerlab", "scope": {}, "local_id": "leaf1",
      "depends_on": [], "observed": true, "ready": true, "wave": 0},
     {"id": "res-spine1", "provider": "containerlab", "scope": {}, "local_id": "spine1",
-     "depends_on": ["res-leaf1"], "observed": true, "ready": false, "waiting_for": "res-leaf1", "wave": 1}
+     "depends_on": ["leaf1"], "observed": true, "ready": false, "waiting_for": "leaf1", "wave": 1}
   ],
   "edges": [
-    {"from": "res-leaf1", "to": "res-spine1"}
+    {"from": "leaf1", "to": "spine1"}
   ],
-  "waves": [["res-leaf1"], ["res-spine1"]],
+  "waves": [["leaf1"], ["spine1"]],
   "summary": {"nodes": 2, "external": 0, "edges": 1, "waves": 2, "not_ready": 1}
 }`
 
@@ -160,8 +166,8 @@ func TestAggregator_Snapshot(t *testing.T) {
 	if w0 := snap.SakuteiGraph.Waves[0]; len(w0) != 1 || w0[0].ID != "res-leaf1" || !w0[0].Ready {
 		t.Errorf("Waves[0] = %+v, want one ready node res-leaf1", w0)
 	}
-	if w1 := snap.SakuteiGraph.Waves[1]; len(w1) != 1 || w1[0].ID != "res-spine1" || w1[0].Ready || w1[0].WaitingFor != "res-leaf1" {
-		t.Errorf("Waves[1] = %+v, want one not-ready node res-spine1 waiting_for res-leaf1", w1)
+	if w1 := snap.SakuteiGraph.Waves[1]; len(w1) != 1 || w1[0].ID != "res-spine1" || w1[0].Ready || w1[0].WaitingFor != "leaf1" {
+		t.Errorf("Waves[1] = %+v, want one not-ready node res-spine1 waiting_for leaf1", w1)
 	}
 
 	byName := map[string]Node{}
