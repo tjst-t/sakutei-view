@@ -372,7 +372,7 @@
       "number": 16,
       "kind": "task",
       "title": "差し込み口アクションのバックエンド配線(scripts/actions/runs)とBasic認証ゲート",
-      "status": "ready",
+      "status": "in-progress",
       "parent": "2",
       "dependsOn": [],
       "milestone": null,
@@ -382,9 +382,14 @@
       "doneWhen": "go test ./internal/api/...が通り、Basic認証未設定時はPOST /api/actions/...とGET /api/scripts・/api/runs/*が404になること、設定済み時はexample-plugin相手にscripts一覧取得・action実行(202)・2回目の409(reason/busy_by)・run状態取得が一通り動くことを実機(curl)で確認する。",
       "resolution": null,
       "refs": [],
-      "threads": [],
+      "threads": [
+        {
+          "projectId": "81b644b5-62e7-4e30-89f6-7f68ccf39742",
+          "threadId": "81c59ff7-31c9-48fb-ba57-805dbbfcb608"
+        }
+      ],
       "createdAt": "2026-10-28T12:04:58.296Z",
-      "updatedAt": "2026-10-28T12:04:58.296Z",
+      "updatedAt": "2026-10-28T12:05:05.564Z",
       "closedAt": null,
       "extra": {}
     },
