@@ -276,7 +276,7 @@
       "number": 11,
       "kind": "task",
       "title": "出来事タイムライン(SSE)",
-      "status": "ready",
+      "status": "done",
       "parent": "1",
       "dependsOn": [
         "api-api-snapshot-api-events",
@@ -287,12 +287,12 @@
       "labels": [],
       "body": "/api/eventsで流れてくるSakuteiのイベントと差し込み口のイベントを同じ時間軸に積んで表示する。",
       "doneWhen": "example-pluginのdisturb/fixアクションを実行すると、対応するイベントがタイムラインに時系列で追加表示されることを確認できる。",
-      "resolution": null,
+      "resolution": "新規実装は不要だった。EventLog/subscribeEvents(/api/eventsの単一SSE購読)は以前のreact-ts-cytoscape-jsタスクで既に実装済みで、Sakuteiと差し込み口の両方のイベントを同じ時間軸(新しい順)に積んで表示する作りになっていた。今回は現行コードベース(TopologyDiagram・Halted一覧・依存DAG(waves)パネルを追加した後の状態)に対して改めて実機で確認した: モックclab-api-server(storage01ノード)+実物のexample-plugin+実物のGoバックエンド(CONTAINERLAB_SOURCE=clab-api, PLUGIN_BASE_URL=example-plugin)+実物のVite dev serverを起動し、ブラウザでdisturbを実行→ノードがOK→Driftに変化しLive eventsに「Disturbed」が実時間で追加、続けてfixを実行→ノードがDriftに戻り「Fixed」が時系列順(新しい順)で追加されることを確認。コンソールエラー無し。go vet/go test ./...全て通過。コード変更なし、Backlogのみクローズ。",
       "refs": [],
       "threads": [],
       "createdAt": "2026-10-28T09:17:43.599Z",
-      "updatedAt": "2026-10-28T09:17:43.599Z",
-      "closedAt": null,
+      "updatedAt": "2026-10-28T11:38:28.988Z",
+      "closedAt": "2026-10-28T11:38:28.988Z",
       "extra": {}
     },
     {
