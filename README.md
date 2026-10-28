@@ -68,6 +68,9 @@ yet):
 | `SOURCE_REQUEST_TIMEOUT` | Deadline for each individual poll request to containerlab/Sakutei/the plugin (Go duration, e.g. `10s`). Default `10s`. A source that misses this deadline does not fail the whole snapshot — see below. |
 | `SOURCE_RECONNECT_INITIAL` | First wait before retrying a dropped SSE stream (Sakutei `/events`, plugin `/plugin/events`). Default `1s`. |
 | `SOURCE_RECONNECT_MAX` | Cap on the exponential backoff between SSE reconnect attempts. Default `30s`. |
+| `EVENTS_STORE_PATH` | Path to a local file where the merged event feed is persisted, so reopening the page or restarting the process doesn't lose history. Optional; unset means `/api/events` stays a bare live stream with no backlog, as before this existed. See [docs/event-timeline.md](docs/event-timeline.md). |
+| `EVENTS_RETENTION_COUNT` | Keep at most this many of the most recent persisted events. Default `10000` when `EVENTS_STORE_PATH` is set; `0` disables count-based retention. |
+| `EVENTS_RETENTION_AGE` | Prune persisted events older than this (Go duration, e.g. `72h`). Optional; unset disables age-based retention. |
 
 ### Resilience: a slow or down source never blocks the others
 

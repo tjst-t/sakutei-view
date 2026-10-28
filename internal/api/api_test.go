@@ -7,6 +7,8 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -14,6 +16,7 @@ import (
 	"github.com/tjst-t/sakutei-view/internal/aggregate"
 	"github.com/tjst-t/sakutei-view/internal/source/containerlab"
 	"github.com/tjst-t/sakutei-view/internal/source/plugin"
+	"github.com/tjst-t/sakutei-view/internal/timeline"
 )
 
 // stubAggregator is a fixed Aggregator for tests, standing in for
@@ -29,7 +32,7 @@ func (s *stubAggregator) Snapshot(ctx context.Context) (aggregate.Snapshot, erro
 	return s.snapshot, s.snapshotErr
 }
 
-func (s *stubAggregator) Events(ctx context.Context, onEvent func(aggregate.Event) error) error {
+func (s *stubAggregator) Events(ctx context.Context, pluginResumeID string, onEvent func(aggregate.Event) error) error {
 	for _, ev := range s.events {
 		if err := onEvent(ev); err != nil {
 			return err
@@ -449,5 +452,214 @@ func TestServer_ActionsRoutes_Enabled(t *testing.T) {
 	defer missingResp.Body.Close()
 	if missingResp.StatusCode != http.StatusNotFound {
 		t.Errorf("GET /api/runs/no-such-run = %d, want 404", missingResp.StatusCode)
+	}
+}
+
+// sseFrame is one "id:"+"data:" pair read off an SSE stream.
+type sseFrame struct {
+	ID    string
+	Event aggregate.Event
+}
+
+// readSSEFrames reads frames off body until it has want of them or timeout
+// elapses, whichever comes first. It is used for Timeline-backed
+// /api/events tests, whose stream never ends on its own (unlike the
+// Timeline-less tests above, where the stub Aggregator's Events call
+// returning ends the handler and so the response naturally completes).
+func readSSEFrames(t *testing.T, resp *http.Response, want int, timeout time.Duration) []sseFrame {
+	t.Helper()
+	done := make(chan []sseFrame, 1)
+	go func() {
+		scanner := bufio.NewScanner(resp.Body)
+		var frames []sseFrame
+		var curID, curData string
+		for scanner.Scan() {
+			line := scanner.Text()
+			switch {
+			case strings.HasPrefix(line, "id:"):
+				curID = strings.TrimSpace(strings.TrimPrefix(line, "id:"))
+			case strings.HasPrefix(line, "data:"):
+				curData = strings.TrimSpace(strings.TrimPrefix(line, "data:"))
+			case line == "":
+				if curData != "" {
+					var ev aggregate.Event
+					if err := json.Unmarshal([]byte(curData), &ev); err == nil {
+						frames = append(frames, sseFrame{ID: curID, Event: ev})
+					}
+				}
+				curID, curData = "", ""
+				if len(frames) >= want {
+					done <- frames
+					return
+				}
+			}
+		}
+		done <- frames
+	}()
+	select {
+	case frames := <-done:
+		return frames
+	case <-time.After(timeout):
+		t.Fatalf("timed out waiting for %d SSE frames", want)
+		return nil
+	}
+}
+
+// TestServer_HandleEvents_WithTimeline_ReplaysBacklog verifies that once a
+// Timeline is configured, a freshly connecting browser tab sees history
+// recorded before it ever connected (the "reloading the page shows past
+// events" requirement), and that each event carries an "id:" line (the
+// Timeline.Entry.Seq) for the browser's own EventSource to resume from
+// later. This never calls stubAggregator.Events: a Timeline-backed
+// connection only reads from Timeline, not the Aggregator directly — only
+// RunEventPump does that (see TestServer_RunEventPump).
+func TestServer_HandleEvents_WithTimeline_ReplaysBacklog(t *testing.T) {
+	store, err := timeline.Open(timeline.Config{Path: filepath.Join(t.TempDir(), "events.jsonl")})
+	if err != nil {
+		t.Fatalf("timeline.Open: %v", err)
+	}
+	defer store.Close()
+
+	now := time.Now().UTC()
+	first, _, err := store.Append(aggregate.Event{Source: aggregate.EventSourceSakutei, Time: now, Kind: "drift", Resource: "leaf1", Message: "one", State: "firing"})
+	if err != nil {
+		t.Fatalf("Append: %v", err)
+	}
+	second, _, err := store.Append(aggregate.Event{Source: aggregate.EventSourceSakutei, Time: now.Add(time.Second), Kind: "drift", Resource: "leaf1", Message: "two", State: "resolved"})
+	if err != nil {
+		t.Fatalf("Append: %v", err)
+	}
+
+	srv := &Server{Aggregator: &stubAggregator{}, Timeline: store}
+	mux := http.NewServeMux()
+	srv.RegisterRoutes(mux)
+	ts := httptest.NewServer(mux)
+	defer ts.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, ts.URL+"/api/events", nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET /api/events: %v", err)
+	}
+	defer resp.Body.Close()
+
+	frames := readSSEFrames(t, resp, 2, 5*time.Second)
+	if len(frames) != 2 {
+		t.Fatalf("got %d frames, want 2: %+v", len(frames), frames)
+	}
+	if frames[0].ID != strconv.FormatUint(first.Seq, 10) || frames[0].Event.Message != "one" {
+		t.Errorf("frames[0] = %+v, want id %d / message \"one\"", frames[0], first.Seq)
+	}
+	if frames[1].ID != strconv.FormatUint(second.Seq, 10) || frames[1].Event.Message != "two" {
+		t.Errorf("frames[1] = %+v, want id %d / message \"two\"", frames[1], second.Seq)
+	}
+}
+
+// TestServer_HandleEvents_WithTimeline_LastEventIDResumesWithoutDuplicates
+// verifies the browser-reconnect half of durability: a client reconnecting
+// with Last-Event-ID set to the last id it saw gets only what came after,
+// not the whole backlog again, and still receives new live events appended
+// afterward.
+func TestServer_HandleEvents_WithTimeline_LastEventIDResumesWithoutDuplicates(t *testing.T) {
+	store, err := timeline.Open(timeline.Config{Path: filepath.Join(t.TempDir(), "events.jsonl")})
+	if err != nil {
+		t.Fatalf("timeline.Open: %v", err)
+	}
+	defer store.Close()
+
+	now := time.Now().UTC()
+	first, _, err := store.Append(aggregate.Event{Source: aggregate.EventSourceSakutei, Time: now, Kind: "drift", Resource: "leaf1", Message: "one"})
+	if err != nil {
+		t.Fatalf("Append: %v", err)
+	}
+
+	srv := &Server{Aggregator: &stubAggregator{}, Timeline: store}
+	mux := http.NewServeMux()
+	srv.RegisterRoutes(mux)
+	ts := httptest.NewServer(mux)
+	defer ts.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, ts.URL+"/api/events", nil)
+	req.Header.Set("Last-Event-ID", strconv.FormatUint(first.Seq, 10))
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET /api/events: %v", err)
+	}
+	defer resp.Body.Close()
+
+	// Append the new event only after the request is already connected and
+	// subscribed, so this also exercises the live (not backlog) delivery
+	// path for it.
+	time.Sleep(50 * time.Millisecond)
+	second, _, err := store.Append(aggregate.Event{Source: aggregate.EventSourceSakutei, Time: now.Add(time.Second), Kind: "drift", Resource: "leaf1", Message: "two"})
+	if err != nil {
+		t.Fatalf("Append: %v", err)
+	}
+
+	frames := readSSEFrames(t, resp, 1, 5*time.Second)
+	if len(frames) != 1 {
+		t.Fatalf("got %d frames, want exactly 1 (no resend of pre-Last-Event-ID backlog, no duplicate): %+v", len(frames), frames)
+	}
+	if frames[0].ID != strconv.FormatUint(second.Seq, 10) || frames[0].Event.Message != "two" {
+		t.Errorf("frames[0] = %+v, want id %d / message \"two\"", frames[0], second.Seq)
+	}
+}
+
+// resumeCapturingAggregator wraps a *stubAggregator just to capture the
+// pluginResumeID RunEventPump passes to Events, which stubAggregator
+// itself ignores.
+type resumeCapturingAggregator struct {
+	*stubAggregator
+	capture *string
+}
+
+func (r resumeCapturingAggregator) Events(ctx context.Context, pluginResumeID string, onEvent func(aggregate.Event) error) error {
+	*r.capture = pluginResumeID
+	return r.stubAggregator.Events(ctx, pluginResumeID, onEvent)
+}
+
+// TestServer_RunEventPump verifies that RunEventPump persists every event
+// from Aggregator.Events into Timeline — independent of any browser
+// connection — and that it passes Timeline.LastPluginEventID() as the
+// plugin resume id, so a process restart resumes the plugin's stream
+// instead of starting it over.
+func TestServer_RunEventPump(t *testing.T) {
+	store, err := timeline.Open(timeline.Config{Path: filepath.Join(t.TempDir(), "events.jsonl")})
+	if err != nil {
+		t.Fatalf("timeline.Open: %v", err)
+	}
+	defer store.Close()
+
+	// Seed the store as if a previous process run had already recorded a
+	// plugin event, so this run's RunEventPump must resume from it.
+	if _, _, err := store.Append(aggregate.Event{Source: aggregate.EventSourcePlugin, Time: time.Now().UTC(), Kind: "restart", Resource: "node1", Message: "prior-run", SourceEventID: "99"}); err != nil {
+		t.Fatalf("seeding Append: %v", err)
+	}
+
+	var gotResumeID string
+	agg := &stubAggregator{events: []aggregate.Event{
+		{Source: aggregate.EventSourceSakutei, Time: time.Now().UTC(), Kind: "drift", Resource: "leaf1", Message: "live-one"},
+		{Source: aggregate.EventSourcePlugin, Time: time.Now().UTC(), Kind: "restart", Resource: "node2", Message: "live-two", SourceEventID: "100"},
+	}}
+	srv := &Server{Aggregator: resumeCapturingAggregator{stubAggregator: agg, capture: &gotResumeID}, Timeline: store}
+
+	if err := srv.RunEventPump(context.Background()); err != nil {
+		t.Fatalf("RunEventPump: %v", err)
+	}
+
+	if gotResumeID != "99" {
+		t.Errorf("pluginResumeID passed to Events = %q, want %q (Timeline.LastPluginEventID at pump start)", gotResumeID, "99")
+	}
+
+	all := store.Since(0)
+	if len(all) != 3 {
+		t.Fatalf("Since(0) after pump = %d entries, want 3 (1 seeded + 2 pumped): %+v", len(all), all)
+	}
+	if store.LastPluginEventID() != "100" {
+		t.Errorf("LastPluginEventID after pump = %q, want %q", store.LastPluginEventID(), "100")
 	}
 }

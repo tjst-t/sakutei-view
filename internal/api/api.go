@@ -18,9 +18,11 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strconv"
 
 	"github.com/tjst-t/sakutei-view/internal/aggregate"
 	"github.com/tjst-t/sakutei-view/internal/source/plugin"
+	"github.com/tjst-t/sakutei-view/internal/timeline"
 )
 
 // Aggregator is the subset of *aggregate.Aggregator this package needs.
@@ -28,7 +30,14 @@ import (
 // standing up real HTTP sources.
 type Aggregator interface {
 	Snapshot(ctx context.Context) (aggregate.Snapshot, error)
-	Events(ctx context.Context, onEvent func(aggregate.Event) error) error
+
+	// Events subscribes to the merged event feed. pluginResumeID, if
+	// non-empty, is sent as the plugin's Last-Event-ID on its very first
+	// connection (see aggregate.Aggregator.Events's doc comment) —
+	// RunEventPump passes Timeline.LastPluginEventID() here so the plugin's
+	// stream resumes across a process restart, not just a dropped
+	// connection.
+	Events(ctx context.Context, pluginResumeID string, onEvent func(aggregate.Event) error) error
 }
 
 // Server holds the handlers for /api/snapshot and /api/events.
@@ -47,6 +56,17 @@ type Server struct {
 	// credentials. If either is empty, no auth is required.
 	BasicAuthUser     string
 	BasicAuthPassword string
+
+	// Timeline, if non-nil, makes GET /api/events durable: a single
+	// background subscription (started by calling RunEventPump once, from
+	// cmd/sakutei-view) persists every event through it, and each browser's
+	// own GET /api/events request replays its backlog (via Timeline.Since)
+	// before switching to live delivery (via Timeline.Subscribe), with an
+	// "id:" line on every SSE event so the browser's own EventSource can
+	// resume with Last-Event-ID across a tab reload. If Timeline is nil,
+	// handleEvents behaves exactly as it always has: a bare live pass-through
+	// of Aggregator.Events with no backlog and no "id:" lines.
+	Timeline *timeline.Store
 }
 
 // actionsEnabled reports whether the write/action endpoints are enabled:
@@ -184,8 +204,27 @@ func (s *Server) writePluginError(w http.ResponseWriter, what string, err error)
 }
 
 // handleEvents serves GET /api/events: a Server-Sent Events stream of the
-// aggregator's merged event feed, one JSON object per "data:" line. It
-// blocks until the client disconnects or the aggregator's stream ends.
+// aggregator's merged event feed, one JSON object per "data:" line.
+//
+// If Timeline is nil, this is a bare live pass-through of Aggregator.Events
+// exactly as before this field existed: no backlog, no "id:" lines, one
+// upstream subscription per connected browser tab.
+//
+// If Timeline is configured, each connection instead: (1) subscribes to
+// Timeline's live feed first, (2) replays Timeline.Since(lastEventID) as
+// backlog so a freshly opened or reloaded tab sees history without ever
+// calling Aggregator.Events itself, then (3) forwards the live feed,
+// skipping anything with Seq <= the last one already sent (the backlog may
+// overlap the start of the live feed, since step 1 happens before step 2 to
+// avoid missing an event that arrives in between). The actual upstream
+// subscription (Aggregator.Events) is owned by RunEventPump, started once
+// from cmd/sakutei-view, not by this handler — multiple browser tabs share
+// it through Timeline rather than each opening their own.
+//
+// lastEventID comes from the Last-Event-ID request header, which browsers
+// send automatically when an EventSource reconnects after a drop; it is
+// parsed as the uint64 Timeline.Entry.Seq it names, and treated as absent
+// (full backlog) if missing or unparsable.
 func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
 	flusher, ok := w.(http.Flusher)
 	if !ok {
@@ -199,18 +238,110 @@ func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	flusher.Flush()
 
-	err := s.Aggregator.Events(r.Context(), func(ev aggregate.Event) error {
-		data, err := json.Marshal(ev)
-		if err != nil {
-			return fmt.Errorf("encoding event: %w", err)
+	if s.Timeline == nil {
+		err := s.Aggregator.Events(r.Context(), "", func(ev aggregate.Event) error {
+			return writeSSEEvent(w, flusher, 0, ev)
+		})
+		if err != nil && r.Context().Err() == nil {
+			log.Printf("api: /api/events: %v", err)
 		}
-		if _, err := fmt.Fprintf(w, "data: %s\n\n", data); err != nil {
+		return
+	}
+
+	// Subscribe before reading the backlog (not after) so an event that
+	// arrives in between is not lost — it will simply appear in both the
+	// backlog and, redundantly, as the first live delivery, which lastSent
+	// below filters back out.
+	live, cancel := s.Timeline.Subscribe()
+	defer cancel()
+
+	var lastSent uint64
+	var resumeFrom uint64
+	if id := r.Header.Get("Last-Event-ID"); id != "" {
+		if parsed, err := strconv.ParseUint(id, 10, 64); err == nil {
+			resumeFrom = parsed
+		}
+	}
+	for _, entry := range s.Timeline.Since(resumeFrom) {
+		if err := writeSSEEvent(w, flusher, entry.Seq, entry.Event); err != nil {
+			return
+		}
+		lastSent = entry.Seq
+	}
+
+	for {
+		select {
+		case entry, ok := <-live:
+			if !ok {
+				return
+			}
+			if entry.Seq <= lastSent {
+				continue
+			}
+			if err := writeSSEEvent(w, flusher, entry.Seq, entry.Event); err != nil {
+				return
+			}
+			lastSent = entry.Seq
+		case <-r.Context().Done():
+			return
+		}
+	}
+}
+
+// writeSSEEvent writes one event as an SSE "data:" line, preceded by an
+// "id:" line when seq is non-zero (zero means "no Timeline configured" or
+// "not yet assigned a sequence number" — omitting the id line in that case
+// matches this handler's pre-Timeline behavior exactly, byte for byte).
+func writeSSEEvent(w http.ResponseWriter, flusher http.Flusher, seq uint64, ev aggregate.Event) error {
+	data, err := json.Marshal(ev)
+	if err != nil {
+		return fmt.Errorf("encoding event: %w", err)
+	}
+	if seq > 0 {
+		if _, err := fmt.Fprintf(w, "id: %d\n", seq); err != nil {
 			return err
 		}
-		flusher.Flush()
+	}
+	if _, err := fmt.Fprintf(w, "data: %s\n\n", data); err != nil {
+		return err
+	}
+	flusher.Flush()
+	return nil
+}
+
+// RunEventPump is the single long-lived background subscription that makes
+// GET /api/events durable: it persists every event from Aggregator.Events
+// into Timeline, independently of whether any browser tab is currently
+// connected. Without it, an event that occurred while no tab was open would
+// never be recorded, breaking the "reloading/reopening the page still shows
+// what happened while it was closed" requirement that Timeline exists for.
+//
+// It resumes the plugin's stream from Timeline.LastPluginEventID() on its
+// very first connection, so a process restart does not redeliver (or, if
+// the plugin does not retain that much backlog, lose) events the plugin
+// already sent before the restart — see aggregate.Aggregator.Events's
+// pluginResumeID parameter.
+//
+// RunEventPump blocks until ctx is cancelled or the Aggregator.Events call
+// returns a non-context error (which, per Aggregator.Events's own contract,
+// only happens if its onEvent callback returns an error — Append's own
+// errors, e.g. a disk write failure, are logged and treated as "keep
+// going" rather than stopping the whole pump, since one bad write should
+// not stop every browser tab's live updates). It is a no-op if s.Timeline
+// is nil. Call it exactly once, in its own goroutine, after constructing
+// Server with Timeline set.
+func (s *Server) RunEventPump(ctx context.Context) error {
+	if s.Timeline == nil {
+		return nil
+	}
+	err := s.Aggregator.Events(ctx, s.Timeline.LastPluginEventID(), func(ev aggregate.Event) error {
+		if _, _, err := s.Timeline.Append(ev); err != nil {
+			log.Printf("api: event pump: persisting event: %v", err)
+		}
 		return nil
 	})
-	if err != nil && r.Context().Err() == nil {
-		log.Printf("api: /api/events: %v", err)
+	if err != nil && ctx.Err() == nil {
+		log.Printf("api: event pump: %v", err)
 	}
+	return err
 }

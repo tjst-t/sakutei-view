@@ -10,10 +10,12 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -23,6 +25,7 @@ import (
 	"github.com/tjst-t/sakutei-view/internal/source/containerlab"
 	"github.com/tjst-t/sakutei-view/internal/source/plugin"
 	"github.com/tjst-t/sakutei-view/internal/source/sakutei"
+	"github.com/tjst-t/sakutei-view/internal/timeline"
 	"github.com/tjst-t/sakutei-view/internal/webui"
 )
 
@@ -85,6 +88,25 @@ func run() error {
 		BasicAuthPassword: basicAuthPassword,
 	}
 
+	eventsStore, err := buildEventsStore()
+	if err != nil {
+		return err
+	}
+	if eventsStore != nil {
+		defer eventsStore.Close()
+		apiServer.Timeline = eventsStore
+		// The single background subscription that makes GET /api/events
+		// durable (see api.Server.RunEventPump's doc comment) — independent
+		// of whether any browser tab is currently connected. It runs for the
+		// life of the process; ListenAndServe below is what actually blocks
+		// run().
+		go func() {
+			if err := apiServer.RunEventPump(context.Background()); err != nil {
+				log.Printf("sakutei-view: event pump stopped: %v", err)
+			}
+		}()
+	}
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -98,6 +120,47 @@ func run() error {
 
 	log.Printf("sakutei-view listening on %s", addr)
 	return http.ListenAndServe(addr, mux)
+}
+
+// buildEventsStore opens the event-timeline store (see internal/timeline)
+// if EVENTS_STORE_PATH is set; the feature is entirely opt-in — an unset
+// path returns (nil, nil) and GET /api/events behaves exactly as it always
+// has (a bare live stream with no backlog and no "id:" lines; see
+// api.Server.Timeline's doc comment).
+//
+// EVENTS_RETENTION_COUNT (an entry count) and EVENTS_RETENTION_AGE (a Go
+// duration, e.g. "24h") independently bound how much history is kept;
+// either may be left unset, but if EVENTS_STORE_PATH is set and both are
+// left unset, EVENTS_RETENTION_COUNT defaults to timeline.DefaultMaxCount
+// rather than growing the file forever — an explicit "0" opts out of count
+// retention entirely (age retention, if set, still applies).
+func buildEventsStore() (*timeline.Store, error) {
+	path := os.Getenv("EVENTS_STORE_PATH")
+	if path == "" {
+		return nil, nil
+	}
+
+	cfg := timeline.Config{Path: path, MaxCount: timeline.DefaultMaxCount}
+	if v := os.Getenv("EVENTS_RETENTION_COUNT"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil || n < 0 {
+			return nil, fmt.Errorf("parsing EVENTS_RETENTION_COUNT=%q: must be a non-negative integer", v)
+		}
+		cfg.MaxCount = n
+	}
+	if v := os.Getenv("EVENTS_RETENTION_AGE"); v != "" {
+		d, err := time.ParseDuration(v)
+		if err != nil {
+			return nil, fmt.Errorf("parsing EVENTS_RETENTION_AGE=%q: %w", v, err)
+		}
+		cfg.MaxAge = d
+	}
+
+	store, err := timeline.Open(cfg)
+	if err != nil {
+		return nil, fmt.Errorf("opening EVENTS_STORE_PATH=%q: %w", path, err)
+	}
+	return store, nil
 }
 
 // buildContainerlabSource builds the containerlab.Source selected by

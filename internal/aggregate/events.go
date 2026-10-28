@@ -29,6 +29,15 @@ type Event struct {
 	State    string      `json:"state,omitempty"`    // "firing" | "resolved" | ""
 	Resource string      `json:"resource,omitempty"`
 	Message  string      `json:"message"`
+
+	// SourceEventID is the originating source's own per-event id, when it
+	// has one. Currently only the plugin sets this (the "id:" field of its
+	// GET /plugin/events SSE stream, per docs/plugin-contract.md); Sakutei's
+	// /events has no per-event id at all, so this is always empty for
+	// EventSourceSakutei. Not sent to the browser — it exists only so
+	// internal/timeline can de-duplicate and resume the plugin's stream
+	// across a process restart, not just a mid-process reconnect.
+	SourceEventID string `json:"-"`
 }
 
 func normalizeSakuteiEvent(ev sakutei.Event) Event {
@@ -61,6 +70,14 @@ func normalizePluginEvent(ev plugin.Event) Event {
 // arrive (not sorted or buffered against each other); onEvent is never
 // called concurrently.
 //
+// pluginResumeID, if non-empty, is sent as the very first Last-Event-ID to
+// the plugin's /plugin/events — not just after a reconnect. A caller that
+// persists plugin events across process restarts (internal/timeline) passes
+// the last event id it previously recorded here, so a plugin that honors
+// Last-Event-ID resume (required by docs/plugin-contract.md) does not
+// redeliver events from before this process started. Pass "" to start from
+// the plugin's live tail, as before this parameter existed.
+//
 // Each source's subscription is independent and self-healing: if its SSE
 // connection drops or fails to establish, Events reconnects it after a
 // backoff that starts at ReconnectInitial and doubles up to ReconnectMax,
@@ -81,7 +98,7 @@ func normalizePluginEvent(ev plugin.Event) Event {
 //
 // Events blocks until ctx is cancelled or onEvent returns an error. On
 // onEvent's error, Events stops both subscriptions and returns that error.
-func (a *Aggregator) Events(ctx context.Context, onEvent func(Event) error) error {
+func (a *Aggregator) Events(ctx context.Context, pluginResumeID string, onEvent func(Event) error) error {
 	if a.Sakutei == nil && a.Plugin == nil {
 		return nil
 	}
@@ -113,7 +130,7 @@ func (a *Aggregator) Events(ctx context.Context, onEvent func(Event) error) erro
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			a.runPluginEventLoop(ctx, send)
+			a.runPluginEventLoop(ctx, pluginResumeID, send)
 		}()
 	}
 
@@ -179,11 +196,12 @@ func (a *Aggregator) runSakuteiEventLoop(ctx context.Context, send func(Event) e
 
 // runPluginEventLoop subscribes to the plugin's /plugin/events and keeps
 // reconnecting (with backoff) until ctx is done, resuming from the last
-// event ID it saw via Last-Event-ID. It never returns an error itself;
+// event ID it saw via Last-Event-ID (starting from resumeID, if non-empty,
+// on the very first connection). It never returns an error itself;
 // failures are recorded via recordError and the loop just retries.
-func (a *Aggregator) runPluginEventLoop(ctx context.Context, send func(Event) error) {
+func (a *Aggregator) runPluginEventLoop(ctx context.Context, resumeID string, send func(Event) error) {
 	backoff := a.reconnectInitial()
-	var lastEventID string
+	lastEventID := resumeID
 	for ctx.Err() == nil {
 		start := time.Now()
 		var sawEvent bool
@@ -193,7 +211,9 @@ func (a *Aggregator) runPluginEventLoop(ctx context.Context, send func(Event) er
 				lastEventID = id
 			}
 			a.recordSuccess(SourcePlugin)
-			return send(normalizePluginEvent(ev))
+			ev2 := normalizePluginEvent(ev)
+			ev2.SourceEventID = id
+			return send(ev2)
 		})
 		if ctx.Err() != nil {
 			return

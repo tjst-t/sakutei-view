@@ -60,7 +60,7 @@ func TestAggregator_Events_MergesBothSources(t *testing.T) {
 	defer cancel()
 
 	var got []Event
-	err := agg.Events(ctx, func(ev Event) error {
+	err := agg.Events(ctx, "", func(ev Event) error {
 		got = append(got, ev)
 		if len(got) == 3 {
 			return errStop
@@ -83,6 +83,9 @@ func TestAggregator_Events_MergesBothSources(t *testing.T) {
 			if ev.Resource != "leaf1" || ev.Kind != "drift" || ev.Severity != "warning" {
 				t.Errorf("unexpected sakutei event: %+v", ev)
 			}
+			if ev.SourceEventID != "" {
+				t.Errorf("sakutei event has a SourceEventID, want empty (Sakutei events never have one): %+v", ev)
+			}
 		case EventSourcePlugin:
 			pluginCount++
 			if ev.Resource != "node3" || ev.Kind != "restart" || ev.State != "firing" || ev.Severity != "" {
@@ -90,6 +93,9 @@ func TestAggregator_Events_MergesBothSources(t *testing.T) {
 			}
 			if ev.Time.IsZero() {
 				t.Errorf("plugin event has zero Time: %+v", ev)
+			}
+			if ev.SourceEventID != "1" {
+				t.Errorf("plugin event SourceEventID = %q, want \"1\" (the fixture's SSE id)", ev.SourceEventID)
 			}
 		default:
 			t.Errorf("unexpected event source: %+v", ev)
@@ -103,7 +109,7 @@ func TestAggregator_Events_MergesBothSources(t *testing.T) {
 func TestAggregator_Events_NoSourcesConfigured(t *testing.T) {
 	agg := New(mockContainerlabSource{}, nil, nil)
 	called := false
-	err := agg.Events(context.Background(), func(Event) error {
+	err := agg.Events(context.Background(), "", func(Event) error {
 		called = true
 		return nil
 	})
@@ -143,7 +149,7 @@ func TestAggregator_Events_OnEventErrorStopsBoth(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	err := agg.Events(ctx, func(ev Event) error {
+	err := agg.Events(ctx, "", func(ev Event) error {
 		return errStop
 	})
 	if err != errStop {
@@ -202,7 +208,7 @@ func TestAggregator_Events_PluginReconnectsWithLastEventID(t *testing.T) {
 	defer cancel()
 
 	var got []Event
-	err := agg.Events(ctx, func(ev Event) error {
+	err := agg.Events(ctx, "", func(ev Event) error {
 		got = append(got, ev)
 		if len(got) == 2 {
 			return errStop
@@ -220,6 +226,50 @@ func TestAggregator_Events_PluginReconnectsWithLastEventID(t *testing.T) {
 	defer mu.Unlock()
 	if len(receivedLastEventIDs) < 2 || receivedLastEventIDs[0] != "" || receivedLastEventIDs[1] != "1" {
 		t.Fatalf("receivedLastEventIDs = %v, want first \"\" then \"1\"", receivedLastEventIDs)
+	}
+}
+
+// TestAggregator_Events_InitialPluginResumeID verifies that a non-empty
+// pluginResumeID passed to Events is sent as Last-Event-ID on the plugin's
+// very first connection, not just after an in-process reconnect. This is
+// what lets internal/timeline resume the plugin's stream across a whole
+// process restart, not only a dropped connection within one run.
+func TestAggregator_Events_InitialPluginResumeID(t *testing.T) {
+	var gotFirstLastEventID string
+	pluginMux := http.NewServeMux()
+	pluginMux.HandleFunc("GET /plugin/events", func(w http.ResponseWriter, r *http.Request) {
+		gotFirstLastEventID = r.Header.Get("Last-Event-ID")
+		flusher := w.(http.Flusher)
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		ev := plugin.Event{Kind: "x", Level: "firing", ResourceID: "r", Message: "after-restart", At: time.Now().UTC()}
+		b, _ := json.Marshal(ev)
+		fmt.Fprintf(w, "id: 99\ndata: %s\n\n", b)
+		flusher.Flush()
+		<-r.Context().Done()
+	})
+	pluginSrv := httptest.NewServer(pluginMux)
+	defer pluginSrv.Close()
+
+	cl := mockContainerlabSource{}
+	agg := New(cl, nil, plugin.NewClient(pluginSrv.URL, nil))
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	var got []Event
+	err := agg.Events(ctx, "42", func(ev Event) error {
+		got = append(got, ev)
+		return errStop
+	})
+	if err != errStop {
+		t.Fatalf("Events: %v, want errStop", err)
+	}
+	if gotFirstLastEventID != "42" {
+		t.Fatalf("first request's Last-Event-ID = %q, want \"42\" (the resume id passed to Events)", gotFirstLastEventID)
+	}
+	if len(got) != 1 || got[0].SourceEventID != "99" {
+		t.Fatalf("got = %+v, want one event with SourceEventID \"99\"", got)
 	}
 }
 
@@ -260,7 +310,7 @@ func TestAggregator_Events_OneSourceDownOtherContinues(t *testing.T) {
 	defer cancel()
 
 	var got []Event
-	err := agg.Events(ctx, func(ev Event) error {
+	err := agg.Events(ctx, "", func(ev Event) error {
 		got = append(got, ev)
 		if len(got) == 2 {
 			return errStop
