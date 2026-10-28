@@ -488,6 +488,29 @@
       "updatedAt": "2026-10-28T12:56:17.334Z",
       "closedAt": null,
       "extra": {}
+    },
+    {
+      "id": "sakutei-graph-waves-sakutei-id-ready-fal",
+      "number": 21,
+      "kind": "bug",
+      "title": "sakutei_graph.wavesが本物のSakuteiで空id/ready falseになる(local_id/id取り違え)",
+      "status": "backlog",
+      "parent": null,
+      "dependsOn": [],
+      "milestone": null,
+      "priority": "normal",
+      "labels": [],
+      "body": "段(3) Part Bの実機検証(本物のSakutei v2.6.0に対するend-to-end確認)で発見。\n\ninternal/aggregate/aggregate.goのbuildGraphが、Sakuteiの`GET /graph`の`waves: [][]string`を`GraphResponse.Nodes[].ID`(完全な複合id、例`dnszone//mail.example.test./A`)をキーにしたmapで引いていたが、Sakuteiのdocs/read-api.md通り`waves`の各要素は実際には各ノードの`local_id`(例`mail.example.test./A`)であり、完全idとは異なる。結果、lookupが常に失敗し、`sakutei_graph.waves`の全エントリが`{\"id\": \"\", \"wave\": 0, \"ready\": false}`という空値で返っていた。\n\n既存のunit testのfixtureは`id`と`local_id`がたまたま同じ文字列(`res-leaf1`)になっていたため、このミスマッチを検出できていなかった。",
+      "doneWhen": "buildGraphをGraphResponse.Nodes[].Waveでグルーピングする方式に変更し(waves[][]stringとの突き合わせをやめる)、fixtureをid≠local_idの実際のワイヤ形式に修正。go vet/go build/go testが通り、実機(本物のSakutei v2.6.0デーモン)に対して/api/snapshotのsakutei_graph.wavesが正しいid/readyを返すことを確認する。",
+      "resolution": null,
+      "refs": [
+        "internal/aggregate/aggregate.go"
+      ],
+      "threads": [],
+      "createdAt": "2026-10-28T14:58:25.153Z",
+      "updatedAt": "2026-10-28T14:58:25.153Z",
+      "closedAt": null,
+      "extra": {}
     }
   ]
 }
