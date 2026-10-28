@@ -116,7 +116,7 @@
       "number": 5,
       "kind": "task",
       "title": "差し込み口クライアント",
-      "status": "ready",
+      "status": "done",
       "parent": "1",
       "dependsOn": [
         "https-ca-bearer"
@@ -126,12 +126,12 @@
       "labels": [],
       "body": "internal/source/plugin/ を実装。docs/plugin-contract.md(v0.1)のGET /plugin, /plugin/status, /plugin/topology, /plugin/scripts, POST .../actions/..., GET /plugin/runs/{run_id}, GET /plugin/events(SSE, Last-Event-ID対応)を呼ぶクライアントを作る。Bearer認証に対応する。",
       "doneWhen": "examples/example-pluginを起動した状態に対して、status取得・events購読(Last-Event-IDでの再開を含む)・scriptsの実行とrun状態取得が行えることを確認できる。",
-      "resolution": null,
+      "resolution": "internal/source/plugin を実装(client.go/sse.go/types.go)。GET /plugin, /plugin/topology, /plugin/status, /plugin/scripts, POST .../actions/..., GET /plugin/runs/{id}, GET /plugin/events(SSE, Last-Event-ID対応)を実装。httptestによる単体テストに加え、examples/example-pluginを実際に起動する統合テストでstatus取得・disturbアクション実行・run完了待ち・Last-Event-IDでの再開を確認済み。コミットd33b33d、main push済み。",
       "refs": [],
       "threads": [],
       "createdAt": "2026-10-28T09:17:43.599Z",
-      "updatedAt": "2026-10-28T09:52:33.543Z",
-      "closedAt": null,
+      "updatedAt": "2026-10-28T09:58:13.092Z",
+      "closedAt": "2026-10-28T09:58:13.092Z",
       "extra": {}
     },
     {
