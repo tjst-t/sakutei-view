@@ -1,6 +1,6 @@
 // Command example-plugin is a minimal, dependency-free reference
 // implementation of the sakutei-view device plugin contract (see
-// docs/plugin-contract.md, version 0.1). It serves static/fake data and a
+// docs/plugin-contract.md, version 0.2). It serves static/fake data and a
 // toy "disturb"/"fix" demo script, useful for exercising sakutei-view
 // without any real device behind it.
 //
@@ -25,7 +25,7 @@ import (
 	"time"
 )
 
-const contractVersion = "0.1"
+const contractVersion = "0.2"
 
 // --- state -----------------------------------------------------------------
 
@@ -165,10 +165,16 @@ func (s *server) handleRunAction(w http.ResponseWriter, r *http.Request) {
 	if s.activeRun != "" {
 		if active, ok := s.runs[s.activeRun]; ok && active.Status == "running" {
 			s.mu.Unlock()
+			// This plugin's own exclusivity is always one of its own runs, so
+			// busy_by is always "run" and run_id is always set here. A plugin
+			// whose exclusivity can instead be held by something external to
+			// its own run-tracking would set busy_by: "external" and omit
+			// run_id in that case (see docs/plugin-contract.md's v0.2 section).
 			writeJSON(w, http.StatusConflict, map[string]any{
 				"accepted": false,
 				"reason":   "another run is already in progress",
 				"run_id":   s.activeRun,
+				"busy_by":  "run",
 			})
 			return
 		}

@@ -106,6 +106,64 @@ func TestClient_RunAction_AcceptedAndConflict(t *testing.T) {
 	}
 }
 
+func TestActionResult_V02FieldsAndV01Compat(t *testing.T) {
+	// v0.2: external busy, no run_id.
+	var external ActionResult
+	if err := json.Unmarshal([]byte(`{"accepted":false,"reason":"environment rebuild in progress","busy_by":"external"}`), &external); err != nil {
+		t.Fatalf("Unmarshal (external): %v", err)
+	}
+	if external.Accepted || external.RunID != "" || external.BusyBy != "external" || external.Reason == "" {
+		t.Fatalf("unexpected decode: %+v", external)
+	}
+
+	// v0.2: busy by one of the plugin's own runs.
+	var ownRun ActionResult
+	if err := json.Unmarshal([]byte(`{"accepted":false,"reason":"another run is already in progress","run_id":"r-0001","busy_by":"run"}`), &ownRun); err != nil {
+		t.Fatalf("Unmarshal (own run): %v", err)
+	}
+	if ownRun.RunID != "r-0001" || ownRun.BusyBy != "run" {
+		t.Fatalf("unexpected decode: %+v", ownRun)
+	}
+
+	// v0.1 plugin: no busy_by field at all, run_id always set. A v0.2-aware
+	// client must still decode this correctly, with BusyBy left empty (a
+	// caller is expected to treat an empty BusyBy as "run").
+	var v01 ActionResult
+	if err := json.Unmarshal([]byte(`{"accepted":false,"reason":"another run is already in progress","run_id":"r-0001"}`), &v01); err != nil {
+		t.Fatalf("Unmarshal (v0.1): %v", err)
+	}
+	if v01.RunID != "r-0001" || v01.BusyBy != "" {
+		t.Fatalf("unexpected decode of a v0.1-shaped response: %+v", v01)
+	}
+}
+
+func TestRun_StatusV02ValuesAndUnknown(t *testing.T) {
+	cases := []struct {
+		status     string
+		inProgress bool
+	}{
+		{"running", true},
+		{"succeeded", false},
+		{"failed", false},
+		{"rejected", false},           // added in v0.2
+		{"cancelled", false},          // added in v0.2
+		{"some-future-status", false}, // unrecognized: must still be treated as terminal
+	}
+	for _, c := range cases {
+		var r Run
+		body := fmt.Sprintf(`{"run_id":"r-1","script_id":"s","action":"disturb","status":%q,"started_at":"2026-10-28T06:00:00Z","finished_at":null,"message":""}`, c.status)
+		if err := json.Unmarshal([]byte(body), &r); err != nil {
+			t.Fatalf("Unmarshal status=%q: %v", c.status, err)
+		}
+		if r.Status != c.status {
+			t.Errorf("status round-trip: got %q, want %q", r.Status, c.status)
+		}
+		if got := RunIsInProgress(r.Status); got != c.inProgress {
+			t.Errorf("RunIsInProgress(%q) = %v, want %v", c.status, got, c.inProgress)
+		}
+	}
+}
+
 func TestClient_Events_StreamAndResumeWithLastEventID(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /plugin/events", func(w http.ResponseWriter, r *http.Request) {

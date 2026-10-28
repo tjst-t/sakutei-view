@@ -1,4 +1,4 @@
-# Device plugin contract — v0.1
+# Device plugin contract — v0.2
 
 sakutei-view reads two kinds of data it does not generate itself:
 containerlab's state and Sakutei's state. A third, optional kind — a
@@ -12,8 +12,13 @@ It is versioned independently of sakutei-view itself; a plugin declares
 the contract version it implements, and sakutei-view will refuse to use a
 plugin whose major version it does not understand.
 
-This version is **0.1** — pre-1.0, and may still change in
-backwards-incompatible ways before 1.0.
+This document describes **0.2**. It is still pre-1.0 and may change in
+backwards-incompatible ways before 1.0, but 0.1 and 0.2 are compatible
+with each other in practice: every field 0.2 adds is optional and a
+sakutei-view that understands 0.2 also understands a 0.1 plugin's
+responses (the new fields simply come back empty). A 0.1 plugin needs no
+changes to keep working; see "Changes in v0.2" below if you are writing or
+updating a plugin.
 
 ## Conventions
 
@@ -42,6 +47,31 @@ backwards-incompatible ways before 1.0.
   no longer true). This lets sakutei-view merge plugin events and Sakutei
   events into one timeline without special-casing either source.
 
+## Changes in v0.2
+
+Both changes are about the two ways `POST .../actions/...` and
+`GET /plugin/runs/{run_id}` can report something other than a run in
+progress — generalizing beyond "another run is already in progress",
+since a plugin's exclusivity is not always held by one of its own runs.
+
+- **`POST .../actions/...`'s 409 response**: `run_id` is now optional, and
+  a new `busy_by` field says what kind of thing is holding exclusivity
+  (`"run"` or `"external"`). A plugin's own run-tracking is not always
+  what makes it unable to start a new action — the deployment's
+  environment can be mid-rebuild, or held by some other exclusive
+  operation the plugin does not itself track as a run. In that case there
+  is no run id to report, so `run_id` may be omitted. See `busy_by` in the
+  endpoint section below for the exact rule. A v0.1 plugin's 409 response
+  (which always sets `run_id`, and never sets `busy_by`) still decodes
+  correctly; a caller should treat a missing `busy_by` as `"run"`.
+- **`GET /plugin/runs/{run_id}`'s `status`**: two values were added —
+  `rejected` (the run could not be started at all) and `cancelled` (the
+  run was stopped before finishing), alongside v0.1's `running`,
+  `succeeded`, `failed`. `status` was always a free-form string for this
+  reason; a caller encountering a status it does not recognize (from this
+  or some future contract version) should treat it as an unknown,
+  terminal state rather than failing or polling forever.
+
 ## `GET /plugin`
 
 Capability/version discovery. Always the first call sakutei-view makes to
@@ -49,13 +79,14 @@ a configured plugin.
 
 ```json
 {
-  "version": "0.1",
+  "version": "0.2",
   "name": "example-plugin",
   "capabilities": ["topology", "status", "scripts", "events"]
 }
 ```
 
-- `version`: the contract version this plugin implements (`"0.1"` here).
+- `version`: the contract version this plugin implements (e.g. `"0.1"` or
+  `"0.2"`).
 - `capabilities`: which of the optional endpoint groups below are
   implemented. `status` and `events` are expected from essentially every
   plugin; `topology` and `scripts` are optional (a plugin that only adds
@@ -151,8 +182,32 @@ against `/plugin/events`.
   already in progress, the plugin responds `409 Conflict`:
 
 ```json
-{ "accepted": false, "reason": "another run is already in progress", "run_id": "r-0001" }
+{
+  "accepted": false,
+  "reason": "another run is already in progress",
+  "run_id": "r-0001",
+  "busy_by": "run"
+}
 ```
+
+- `busy_by` (added in v0.2) says what kind of thing is holding
+  exclusivity:
+  - `"run"`: one of this plugin's own runs (the usual case above).
+    `run_id` is set, and can be polled via `GET /plugin/runs/{run_id}`.
+  - `"external"`: something outside this plugin's own run-tracking holds
+    exclusivity — for example, the deployment's environment as a whole is
+    being rebuilt or re-validated by a process the plugin does not treat
+    as one of its own runs. There is no run id to report in this case, so
+    `run_id` is omitted:
+
+    ```json
+    { "accepted": false, "reason": "environment rebuild in progress", "busy_by": "external" }
+    ```
+
+  A v0.1 plugin never sets `busy_by` and always sets `run_id` on a 409; a
+  caller should treat a missing `busy_by` as `"run"`.
+- `reason` is always set when `accepted` is `false`, and is free-form —
+  shown to a human as-is, not parsed.
 
 ## `GET /plugin/runs/{run_id}`
 
@@ -170,7 +225,14 @@ Status of a previously started run.
 }
 ```
 
-- `status`: one of `running`, `succeeded`, `failed`.
+- `status`: `running`, `succeeded`, `failed` (v0.1), plus, as of v0.2,
+  `rejected` (the run could not be started at all, so it never actually
+  ran) and `cancelled` (the run was stopped before finishing). This field
+  is intentionally a free-form string rather than a closed enum: a caller
+  should treat any value other than `running` as finished, and any value
+  it does not otherwise recognize as an unknown-but-terminal state, so a
+  future contract version can add further statuses without breaking
+  existing callers.
 - `finished_at` / `message` are populated once the run is no longer
   `running`.
 
