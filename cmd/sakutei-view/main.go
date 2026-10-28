@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/tjst-t/sakutei-view/internal/aggregate"
 	"github.com/tjst-t/sakutei-view/internal/api"
@@ -49,6 +50,21 @@ func run() error {
 	}
 
 	agg := aggregate.New(clSource, sakuteiClient, pluginClient)
+	if d, err := getenvDuration("SOURCE_REQUEST_TIMEOUT"); err != nil {
+		return err
+	} else if d > 0 {
+		agg.RequestTimeout = d
+	}
+	if d, err := getenvDuration("SOURCE_RECONNECT_INITIAL"); err != nil {
+		return err
+	} else if d > 0 {
+		agg.ReconnectInitial = d
+	}
+	if d, err := getenvDuration("SOURCE_RECONNECT_MAX"); err != nil {
+		return err
+	} else if d > 0 {
+		agg.ReconnectMax = d
+	}
 
 	basicAuthPassword, err := resolveSecret("BASIC_AUTH_PASSWORD_FILE", "BASIC_AUTH_PASSWORD")
 	if err != nil {
@@ -163,4 +179,19 @@ func getenv(name, fallback string) string {
 		return v
 	}
 	return fallback
+}
+
+// getenvDuration parses name as a Go duration string (e.g. "10s") if set,
+// returning 0 (meaning "use the aggregate package's default") if it is
+// unset.
+func getenvDuration(name string) (time.Duration, error) {
+	v := os.Getenv(name)
+	if v == "" {
+		return 0, nil
+	}
+	d, err := time.ParseDuration(v)
+	if err != nil {
+		return 0, fmt.Errorf("parsing %s=%q: %w", name, v, err)
+	}
+	return d, nil
 }

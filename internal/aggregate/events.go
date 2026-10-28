@@ -2,7 +2,6 @@ package aggregate
 
 import (
 	"context"
-	"fmt"
 	"sync"
 	"time"
 
@@ -62,10 +61,26 @@ func normalizePluginEvent(ev plugin.Event) Event {
 // arrive (not sorted or buffered against each other); onEvent is never
 // called concurrently.
 //
-// Events blocks until ctx is cancelled, every configured source's stream
-// ends, onEvent returns an error, or a source returns a transport/decoding
-// error. On error from any source or from onEvent, Events cancels the other
-// source's subscription and returns that error (or onEvent's).
+// Each source's subscription is independent and self-healing: if its SSE
+// connection drops or fails to establish, Events reconnects it after a
+// backoff that starts at ReconnectInitial and doubles up to ReconnectMax,
+// resetting once the stream has been up for a while. One source being
+// permanently down does not stop the other from delivering events, and
+// does not make Events return — only ctx cancellation or onEvent returning
+// an error does that. Each attempt's outcome is recorded in the
+// Aggregator's Health (see Snapshot.Health), so a caller polling Snapshot
+// concurrently can tell "this source isn't being read right now" apart
+// from "this source isn't configured".
+//
+// For the plugin's /plugin/events, Events resumes after a reconnect by
+// sending the last event ID it received as Last-Event-ID, per
+// docs/plugin-contract.md, so no events are replayed or skipped across a
+// reconnect. Sakutei's /events has no such resume mechanism (see
+// sakutei.Client.Events's doc comment): each reconnect simply re-receives
+// whatever is currently firing.
+//
+// Events blocks until ctx is cancelled or onEvent returns an error. On
+// onEvent's error, Events stops both subscriptions and returns that error.
 func (a *Aggregator) Events(ctx context.Context, onEvent func(Event) error) error {
 	if a.Sakutei == nil && a.Plugin == nil {
 		return nil
@@ -75,8 +90,6 @@ func (a *Aggregator) Events(ctx context.Context, onEvent func(Event) error) erro
 	defer cancel()
 
 	events := make(chan Event)
-	errs := make(chan error, 2)
-	var wg sync.WaitGroup
 
 	send := func(ev Event) error {
 		select {
@@ -87,28 +100,20 @@ func (a *Aggregator) Events(ctx context.Context, onEvent func(Event) error) erro
 		}
 	}
 
+	var wg sync.WaitGroup
+
 	if a.Sakutei != nil {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			err := a.Sakutei.Events(ctx, func(ev sakutei.Event) error {
-				return send(normalizeSakuteiEvent(ev))
-			}, nil)
-			if err != nil && ctx.Err() == nil {
-				errs <- fmt.Errorf("sakutei events: %w", err)
-			}
+			a.runSakuteiEventLoop(ctx, send)
 		}()
 	}
 	if a.Plugin != nil {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			err := a.Plugin.Events(ctx, "", func(_ string, ev plugin.Event) error {
-				return send(normalizePluginEvent(ev))
-			})
-			if err != nil && ctx.Err() == nil {
-				errs <- fmt.Errorf("plugin events: %w", err)
-			}
+			a.runPluginEventLoop(ctx, send)
 		}()
 	}
 
@@ -126,20 +131,106 @@ func (a *Aggregator) Events(ctx context.Context, onEvent func(Event) error) erro
 				<-done
 				return err
 			}
-		case err := <-errs:
-			cancel()
-			<-done
-			return err
-		case <-done:
-			select {
-			case err := <-errs:
-				return err
-			default:
-				return ctx.Err()
-			}
 		case <-ctx.Done():
 			<-done
 			return ctx.Err()
 		}
 	}
+}
+
+// runSakuteiEventLoop subscribes to Sakutei's /events and keeps
+// reconnecting (with backoff) until ctx is done. It never returns an error
+// itself; failures are recorded via recordError and the loop just retries.
+func (a *Aggregator) runSakuteiEventLoop(ctx context.Context, send func(Event) error) {
+	backoff := a.reconnectInitial()
+	for ctx.Err() == nil {
+		start := time.Now()
+		var sawEvent bool
+		err := a.Sakutei.Events(ctx, func(ev sakutei.Event) error {
+			sawEvent = true
+			a.recordSuccess(SourceSakutei)
+			return send(normalizeSakuteiEvent(ev))
+		}, nil)
+		if ctx.Err() != nil {
+			return
+		}
+
+		switch {
+		case err == nil:
+			// The stream ended cleanly (server closed it) without ever
+			// erroring; treat the source as reachable.
+			a.recordSuccess(SourceSakutei)
+		default:
+			a.recordError(SourceSakutei, err)
+		}
+		// A connection that stayed up long enough to be worth resetting
+		// backoff for (whether or not it ultimately errored) — avoids a
+		// single late failure after a long healthy stream being treated
+		// like a tight failure loop.
+		if sawEvent || time.Since(start) >= a.reconnectInitial() {
+			backoff = a.reconnectInitial()
+		}
+
+		if !sleepBackoff(ctx, &backoff, a.reconnectMax()) {
+			return
+		}
+	}
+}
+
+// runPluginEventLoop subscribes to the plugin's /plugin/events and keeps
+// reconnecting (with backoff) until ctx is done, resuming from the last
+// event ID it saw via Last-Event-ID. It never returns an error itself;
+// failures are recorded via recordError and the loop just retries.
+func (a *Aggregator) runPluginEventLoop(ctx context.Context, send func(Event) error) {
+	backoff := a.reconnectInitial()
+	var lastEventID string
+	for ctx.Err() == nil {
+		start := time.Now()
+		var sawEvent bool
+		err := a.Plugin.Events(ctx, lastEventID, func(id string, ev plugin.Event) error {
+			sawEvent = true
+			if id != "" {
+				lastEventID = id
+			}
+			a.recordSuccess(SourcePlugin)
+			return send(normalizePluginEvent(ev))
+		})
+		if ctx.Err() != nil {
+			return
+		}
+
+		switch {
+		case err == nil:
+			a.recordSuccess(SourcePlugin)
+		default:
+			a.recordError(SourcePlugin, err)
+		}
+		if sawEvent || time.Since(start) >= a.reconnectInitial() {
+			backoff = a.reconnectInitial()
+		}
+
+		if !sleepBackoff(ctx, &backoff, a.reconnectMax()) {
+			return
+		}
+	}
+}
+
+// sleepBackoff waits for *backoff (or until ctx is done, whichever comes
+// first), then doubles *backoff up to max for the next call. It returns
+// false if ctx was done instead of the wait completing, meaning the caller
+// should stop retrying.
+func sleepBackoff(ctx context.Context, backoff *time.Duration, max time.Duration) bool {
+	timer := time.NewTimer(*backoff)
+	defer timer.Stop()
+	select {
+	case <-timer.C:
+	case <-ctx.Done():
+		return false
+	}
+	next := *backoff * 2
+	if next > max {
+		next = max
+	}
+	*backoff = next
+	return true
 }

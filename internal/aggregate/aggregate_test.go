@@ -4,7 +4,9 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/tjst-t/sakutei-view/internal/source/containerlab"
 	"github.com/tjst-t/sakutei-view/internal/source/plugin"
@@ -154,6 +156,123 @@ func TestAggregator_Snapshot_NoOptionalSources(t *testing.T) {
 	}
 	if snap.SakuteiSummary != nil {
 		t.Errorf("SakuteiSummary = %+v, want nil", snap.SakuteiSummary)
+	}
+}
+
+// TestAggregator_Snapshot_RequestTimeout verifies that a source which never
+// responds cannot block Snapshot forever: with a short RequestTimeout,
+// Snapshot must return promptly, with the other (healthy) source's data
+// intact and the hung source's failure recorded in Health.
+func TestAggregator_Snapshot_RequestTimeout(t *testing.T) {
+	block := make(chan struct{})
+	sakuteiSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		<-block // never respond
+	}))
+	defer func() {
+		close(block) // let the hung handler return before the server closes
+		sakuteiSrv.Close()
+	}()
+
+	cl := mockContainerlabSource{topo: containerlab.Topology{
+		Nodes: []containerlab.Node{{Name: "n1", State: "running"}},
+	}}
+	agg := New(cl, sakutei.NewClient(sakuteiSrv.URL, nil), nil)
+	agg.RequestTimeout = 50 * time.Millisecond
+
+	start := time.Now()
+	snap, err := agg.Snapshot(context.Background())
+	if err != nil {
+		t.Fatalf("Snapshot: %v", err)
+	}
+	if elapsed := time.Since(start); elapsed > 2*time.Second {
+		t.Fatalf("Snapshot took %s, want it to return soon after the per-request timeout fires", elapsed)
+	}
+	if len(snap.Nodes) != 1 {
+		t.Fatalf("Nodes = %d, want 1 (containerlab still worked despite sakutei hanging)", len(snap.Nodes))
+	}
+	h := snap.Health[SourceSakutei]
+	if !h.Configured || h.OK || h.LastError == "" {
+		t.Errorf("Sakutei health = %+v, want Configured=true OK=false with a LastError", h)
+	}
+	cl2 := snap.Health[SourceContainerlab]
+	if !cl2.Configured || !cl2.OK {
+		t.Errorf("Containerlab health = %+v, want Configured=true OK=true", cl2)
+	}
+}
+
+// TestAggregator_Snapshot_FallsBackToCacheOnFailure verifies that once a
+// source has answered successfully at least once, a later failure does not
+// drop its data from the Snapshot — the last good value is kept, with
+// Health reporting the source as currently unreachable.
+func TestAggregator_Snapshot_FallsBackToCacheOnFailure(t *testing.T) {
+	var fail atomic.Bool
+	pluginMux := http.NewServeMux()
+	pluginMux.HandleFunc("GET /plugin/status", func(w http.ResponseWriter, r *http.Request) {
+		if fail.Load() {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(pluginStatusFixture))
+	})
+	pluginSrv := httptest.NewServer(pluginMux)
+	defer pluginSrv.Close()
+
+	cl := mockContainerlabSource{topo: containerlab.Topology{
+		Nodes: []containerlab.Node{{Name: "node3", State: "running"}},
+	}}
+	agg := New(cl, nil, plugin.NewClient(pluginSrv.URL, nil))
+
+	snap1, err := agg.Snapshot(context.Background())
+	if err != nil {
+		t.Fatalf("Snapshot (1st): %v", err)
+	}
+	if snap1.Nodes[0].Plugin == nil {
+		t.Fatalf("expected a plugin overlay on the first (successful) snapshot")
+	}
+	if !snap1.Health[SourcePlugin].OK {
+		t.Errorf("Health[plugin] = %+v, want OK=true after a successful poll", snap1.Health[SourcePlugin])
+	}
+
+	fail.Store(true)
+	snap2, err := agg.Snapshot(context.Background())
+	if err != nil {
+		t.Fatalf("Snapshot (2nd): %v", err)
+	}
+	if snap2.Nodes[0].Plugin == nil {
+		t.Errorf("expected the cached plugin overlay to survive a failed poll, got none")
+	}
+	h := snap2.Health[SourcePlugin]
+	if h.OK || h.LastError == "" {
+		t.Errorf("Health[plugin] = %+v, want OK=false with LastError set after the failure", h)
+	}
+	if h.LastSuccess == nil {
+		t.Errorf("Health[plugin].LastSuccess should still be set from the earlier success, got nil")
+	}
+}
+
+// TestAggregator_Snapshot_HealthDistinguishesUnconfiguredFromUnreachable
+// verifies that a source that was never given a client (not configured for
+// this deployment) is reported differently from one that is configured but
+// currently failing.
+func TestAggregator_Snapshot_HealthDistinguishesUnconfiguredFromUnreachable(t *testing.T) {
+	cl := mockContainerlabSource{topo: containerlab.Topology{
+		Nodes: []containerlab.Node{{Name: "solo", State: "running"}},
+	}}
+	agg := New(cl, nil, nil)
+
+	snap, err := agg.Snapshot(context.Background())
+	if err != nil {
+		t.Fatalf("Snapshot: %v", err)
+	}
+	for _, name := range []SourceName{SourceSakutei, SourcePlugin} {
+		h := snap.Health[name]
+		if h.Configured {
+			t.Errorf("Health[%s].Configured = true, want false (no client was given)", name)
+		}
+	}
+	if h := snap.Health[SourceContainerlab]; !h.Configured || !h.OK {
+		t.Errorf("Health[containerlab] = %+v, want Configured=true OK=true", h)
 	}
 }
 

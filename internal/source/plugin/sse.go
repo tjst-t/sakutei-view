@@ -51,9 +51,12 @@ func (c *Client) Events(ctx context.Context, lastEventID string, onEvent func(id
 			return nil
 		}
 		data := strings.Join(dataLines, "\n")
-		id := curID
 		dataLines = nil
-		curID = ""
+		// Per the SSE spec, the last event ID persists across events that
+		// don't carry their own "id:" line; it is only replaced by a later
+		// "id:" line, never reset just because an event was dispatched. This
+		// matters for callers that resume with Last-Event-ID after a drop.
+		id := curID
 
 		var ev Event
 		if err := json.Unmarshal([]byte(data), &ev); err != nil {
