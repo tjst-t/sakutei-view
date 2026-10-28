@@ -51,7 +51,9 @@
       "title": "containerlabデータソース(差し替え可能)",
       "status": "ready",
       "parent": "1",
-      "dependsOn": [],
+      "dependsOn": [
+        "https-ca-bearer"
+      ],
       "milestone": null,
       "priority": "normal",
       "labels": [],
@@ -61,7 +63,7 @@
       "refs": [],
       "threads": [],
       "createdAt": "2026-10-28T09:17:43.599Z",
-      "updatedAt": "2026-10-28T09:17:43.599Z",
+      "updatedAt": "2026-10-28T09:52:11.700Z",
       "closedAt": null,
       "extra": {}
     },
