@@ -223,7 +223,7 @@
       "number": 9,
       "kind": "task",
       "title": "構成図表示とノード状態の色分け",
-      "status": "in-progress",
+      "status": "done",
       "parent": "1",
       "dependsOn": [
         "api-api-snapshot-api-events",
@@ -234,7 +234,7 @@
       "labels": [],
       "body": "Cytoscape.jsで構成図(ノード・リンク)を描画し、Sakuteiの状態(ok=緑, drifted=黄, ApplyFailed/BudgetHalted等=赤)でノードの枠色を変える。差し込み口の装置もアイコン付きノードとして表示する。",
       "doneWhen": "見本データで、緑/黄/赤の状態がノードの見た目に反映され、/plugin/scripts実行後の状態変化(disturb→赤、fix→緑)が画面に反映されることを確認できる。",
-      "resolution": null,
+      "resolution": "Cytoscape.jsでTopologyDiagramを実装(web/src/components/TopologyDiagram.tsx)。ノード枠色をstatusColorHex(colors.tsに新設、Cytoscapeはcanvas描画のためCSS変数を解決できずhex値が必要)でok=緑/drift=黄/down,apply_failed=赤/workflow=青/unknown,unmanaged,unobservable=灰に対応。差し込み口のオーバーレイを持つノードには右下に小さなデバイスアイコンのバッジを表示。ノードクリックで詳細パネル(kind/containerlab状態/Sakutei・pluginオーバーレイ)を表示し、スナップショット更新のたびに最新化。スナップショット差分適用でノード/エッジのデータのみ更新し、集合が変わったときだけcoseレイアウトを再実行(色変化でpan/zoom・配置が壊れないように)。実機検証:モックclab-api-server+examples/example-plugin+go run ./cmd/sakutei-view+実ブラウザでdisturb→Drift(黄)反映、fix→OK(緑)反映を5秒ポーリング内で確認、コンソールエラーなし。npm run build/lint通過。副産物として@types/cytoscapeを削除(cytoscape本体が独自のindex.d.tsを同梱しており完全に影で無用だったため)。mainへpush済み(コミット7695202)。",
       "refs": [],
       "threads": [
         {
@@ -243,8 +243,8 @@
         }
       ],
       "createdAt": "2026-10-28T09:17:43.599Z",
-      "updatedAt": "2026-10-28T11:11:31.551Z",
-      "closedAt": null,
+      "updatedAt": "2026-10-28T11:21:00.809Z",
+      "closedAt": "2026-10-28T11:21:00.809Z",
       "extra": {}
     },
     {
