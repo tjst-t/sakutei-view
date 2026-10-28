@@ -1,0 +1,16 @@
+# Go
+/bin/
+/dist/
+*.test
+*.out
+
+# Node / frontend
+web/node_modules/
+web/dist/
+
+# Local env / secrets
+.env
+*.local
+
+# OS
+.DS_Store
