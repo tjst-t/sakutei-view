@@ -314,6 +314,32 @@
       "updatedAt": "2026-10-28T09:17:43.599Z",
       "closedAt": null,
       "extra": {}
+    },
+    {
+      "id": "sse-2",
+      "number": 14,
+      "kind": "task",
+      "title": "外部接続の耐障害性(タイムアウト・SSE再接続・ヘルス表示)",
+      "status": "in-progress",
+      "parent": "1",
+      "dependsOn": [],
+      "milestone": null,
+      "priority": "normal",
+      "labels": [],
+      "body": "タイガマネージャーからの設計指示(画面着手前に入れるべき耐障害性)を実装。\n\n- Snapshot()の各ポーリング(containerlab/Sakutei `/status`/plugin `/plugin/status`)にリクエスト単位のcontext.WithTimeout(SOURCE_REQUEST_TIMEOUT、既定10s)を追加。失敗時は直前の成功値にフォールバックし、スナップショット全体は失敗させない。\n- Events()の2つのSSE(Sakutei `/events`、plugin `/plugin/events`)を、切断時に指数バックオフ(SOURCE_RECONNECT_INITIAL既定1s〜SOURCE_RECONNECT_MAX既定30s)で無限に再接続するよう変更。各ソースは独立したgoroutineで動き、片方の永続的な障害がもう片方を止めない。pluginはLast-Event-IDで再開する。\n- internal/source/plugin/sse.goのSSE仕様違反(idの無いイベントでcurIDを毎回\"\"に戻していた)を修正。再接続時の再開位置消失バグ。\n- Snapshotに`Health`マップ(configured/ok/last_success/last_error)を追加。未設定と「設定済みだが現在到達不能」を区別できるようにした(将来のUI「このソースは読めません(最終成功: X)」表示の土台)。\n- cmd/sakutei-view/main.goにSOURCE_REQUEST_TIMEOUT/SOURCE_RECONNECT_INITIAL/SOURCE_RECONNECT_MAXの環境変数を追加、README.mdに説明を追記。",
+      "doneWhen": "gofmt -l . が空、go build ./... / go vet ./... / go test ./... が全て通る。httptestによる実ネットワークのテストで(a)タイムアウト発火、(b)Last-Event-IDでの再開、(c)片方のソースが永続的に落ちてももう片方は配信を続ける、の3点を確認済み。mainにfast-forwardでpush済み。",
+      "resolution": null,
+      "refs": [],
+      "threads": [
+        {
+          "projectId": "81b644b5-62e7-4e30-89f6-7f68ccf39742",
+          "threadId": "81c59ff7-31c9-48fb-ba57-805dbbfcb608"
+        }
+      ],
+      "createdAt": "2026-10-28T10:51:56.630Z",
+      "updatedAt": "2026-10-28T10:51:56.630Z",
+      "closedAt": null,
+      "extra": {}
     }
   ]
 }
