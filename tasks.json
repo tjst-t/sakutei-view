@@ -366,6 +366,50 @@
       "updatedAt": "2026-10-28T12:04:11.206Z",
       "closedAt": null,
       "extra": {}
+    },
+    {
+      "id": "actions-backend",
+      "number": 16,
+      "kind": "task",
+      "title": "差し込み口アクションのバックエンド配線(scripts/actions/runs)とBasic認証ゲート",
+      "status": "ready",
+      "parent": "2",
+      "dependsOn": [],
+      "milestone": null,
+      "priority": "normal",
+      "labels": [],
+      "body": "internal/api/api.goにGET /api/scripts・POST /api/actions/{scriptID}/{action}・GET /api/runs/{runID}を追加し、plugin.Clientへプロキシする。これらのルートはPlugin(差し込み口)が設定済み かつ Basic認証(BasicAuthUser/Password)が設定済みのときだけ登録する(どちらか欠けていれば登録せず404のまま=読むだけ)。GET /api/snapshotのレスポンスにactions_enabled(bool)を追加し、フロントエンドが操作欄の表示可否を判定できるようにする。internal/source/plugin/client.goにStatusCodeOf(err)ヘルパーを追加し、Run取得時の404等を適切なHTTPステータスで返す。",
+      "doneWhen": "go test ./internal/api/...が通り、Basic認証未設定時はPOST /api/actions/...とGET /api/scripts・/api/runs/*が404になること、設定済み時はexample-plugin相手にscripts一覧取得・action実行(202)・2回目の409(reason/busy_by)・run状態取得が一通り動くことを実機(curl)で確認する。",
+      "resolution": null,
+      "refs": [],
+      "threads": [],
+      "createdAt": "2026-10-28T12:04:58.296Z",
+      "updatedAt": "2026-10-28T12:04:58.296Z",
+      "closedAt": null,
+      "extra": {}
+    },
+    {
+      "id": "actions-ui",
+      "number": 17,
+      "kind": "task",
+      "title": "操作パネルUI(台本選択・ずらす/直す・runステータス表示)",
+      "status": "ready",
+      "parent": "2",
+      "dependsOn": [
+        "actions-backend"
+      ],
+      "milestone": null,
+      "priority": "normal",
+      "labels": [],
+      "body": "web/にOperationsPanelコンポーネントを追加。snapshotのactions_enabledがtrueのときだけ表示。GET /api/scriptsで台本一覧を取得し、各actionのボタンを表示。クリックでPOST /api/actions/{scriptID}/{action}を呼び、202ならrun_idをGET /api/runs/{run_id}でポーリングして終端状態(succeeded/failed/rejected/cancelled/未知)まで表示、409ならreason・busy_byを表示する。同時に1つの操作しか走らせられないよう、実行中はボタンを無効化する。構成図の色変化と出来事ログは既存のsnapshotポーリング/SSEでそのまま反映される想定で、追加の配線は作らない。",
+      "doneWhen": "example-plugin+実物Goバックエンド+ブラウザで、台本を選び「ずらす」を押すと構成図のstorage01ノードが赤くなりイベントログにDisturbedが流れ、runステータスがsucceededになることを確認する。続けて「直す」を押すと元のok色に戻りFixedイベントが流れることを確認する。連打で2回目のクリックが409として扱われreason/busy_byが表示されることも確認する。Basic認証を設定していないバックエンドではOperationsPanelが表示されないことも確認する。npm run build/lintが通ること。",
+      "resolution": null,
+      "refs": [],
+      "threads": [],
+      "createdAt": "2026-10-28T12:04:58.296Z",
+      "updatedAt": "2026-10-28T12:04:58.296Z",
+      "closedAt": null,
+      "extra": {}
     }
   ]
 }
