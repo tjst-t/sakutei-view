@@ -252,7 +252,7 @@
       "number": 10,
       "kind": "task",
       "title": "Sakuteiサマリーパネルと依存DAG(波)表示",
-      "status": "ready",
+      "status": "done",
       "parent": "1",
       "dependsOn": [
         "api-api-snapshot-api-events",
@@ -263,12 +263,12 @@
       "labels": [],
       "body": "Sakuteiの状態要約(適合/drift件数、止まっている理由)のパネルと、依存の組み上げ(wave)を表示するパネルを実装する。",
       "doneWhen": "見本データで、適合/drift件数と止まっている理由の一覧、waveごとのready状況が画面に表示されることを確認できる。",
-      "resolution": null,
+      "resolution": "実装・実機検証・push完了(mainコミット86ad3c0)。バックエンド: AggregatorがSakuteiのGET /plan・GET /graphも/statusと同様にポーリング(失敗時は直前の成功値にフォールバック)し、Snapshotにsakutei_stop_reasons(/statusのapply_stopped理由 + /planのbudget/capacityゲート + prune_halts理由を統合した一覧)とsakutei_graph(/graphをwaveごとにグルーピングしready/waiting_forを保持)を追加。フロントエンド: SakuteiSummaryPanelに「Halted」一覧を追加、新規DependencyWavesコンポーネントでwaveごとの列とready/not-ready表示を追加。モックclab-api-server+モックSakutei読み取り専用APIに対し実際のGoバックエンド+Vite dev server+実ブラウザで検証し、適合/drift件数・3種の止まっている理由(resource/budget/prune)・2waveの依存DAG(wave0 ready, wave1がwave0待ち)が1回のsnapshot取得から正しく表示されることを確認。コンソールエラーなし。go test/npm run lint/npm run buildすべて通過。",
       "refs": [],
       "threads": [],
       "createdAt": "2026-10-28T09:17:43.599Z",
-      "updatedAt": "2026-10-28T09:17:43.599Z",
-      "closedAt": null,
+      "updatedAt": "2026-10-28T11:32:15.721Z",
+      "closedAt": "2026-10-28T11:32:15.721Z",
       "extra": {}
     },
     {
