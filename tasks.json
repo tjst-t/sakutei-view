@@ -70,7 +70,7 @@
       "number": 3,
       "kind": "task",
       "title": "containerlabデータソース(差し替え可能)",
-      "status": "in-progress",
+      "status": "done",
       "parent": "1",
       "dependsOn": [
         "https-ca-bearer"
@@ -80,7 +80,7 @@
       "labels": [],
       "body": "internal/source/containerlab/ を実装。clab-api-server経由とdifficulty込み口のGET /plugin/topology経由を同じインターフェースで切り替えられるようにする。トポロジ(ノード・リンク・アドレス)とノード状態を取得する。",
       "doneWhen": "固定の見本JSON(clab-api-server形式、または/plugin/topology形式)を与えたとき、ノード一覧・リンク一覧・ノード状態を正しくパースしたGoの構造体が得られることを単体テストで確認できる。",
-      "resolution": null,
+      "resolution": "internal/source/containerlab/ を実装し、clab-api-server(GET /api/v1/labs/{lab}, GET /api/v1/labs/{lab}/links)経由とdevice pluginのGET /plugin/topology経由を共通のSourceインターフェースで切り替えられるようにした。フィールド名はclab-api-serverの公開swagger.jsonとcontainerlab本体のinspect --format jsonドキュメントで確認した実物。固定の見本JSONを使った単体テスト(clab-api-server形式・plugin形式それぞれ)でノード一覧・リンク一覧・ノード状態の取得を確認。全テスト通過、gofmt/go vet済み。コミットa569e9cをmainにpush済み。",
       "refs": [],
       "threads": [
         {
@@ -89,8 +89,8 @@
         }
       ],
       "createdAt": "2026-10-28T09:17:43.599Z",
-      "updatedAt": "2026-10-28T10:07:53.573Z",
-      "closedAt": null,
+      "updatedAt": "2026-10-28T10:11:17.714Z",
+      "closedAt": "2026-10-28T10:11:17.714Z",
       "extra": {}
     },
     {
