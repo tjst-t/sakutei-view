@@ -300,7 +300,7 @@
       "number": 12,
       "kind": "task",
       "title": "見た目の作り込みとフロントエンドのembed組み込み",
-      "status": "ready",
+      "status": "done",
       "parent": "1",
       "dependsOn": [
         "item-2",
@@ -312,12 +312,12 @@
       "labels": [],
       "body": "frontend-design skillに沿って配色・タイポグラフィ等を仕上げる。フロントエンドのビルド成果物をGoバイナリにembedし、go build ./...だけでWeb UI込みの単一バイナリができるようにする。READMEにビルド手順を追記する。",
       "doneWhen": "go build ./cmd/sakutei-viewで生成した単一バイナリを起動し、ブラウザでアクセスすると完成した画面(構成図・サマリー・DAG・タイムライン)が見られる。段(1)のdoneWhenを満たす。",
-      "resolution": null,
+      "resolution": "frontend-design skillに沿った見た目の仕上げ(accent色の分離、Sakuteiサマリーと依存DAGカードの統合、Halted/wave見出しの脱ALL-CAPS、タイポグラフィの統一スケール、レスポンシブ.layoutグリッド、ダークスクロールバー、prefers-reduced-motion対応、focus-visible)と、internal/webuiパッケージによるgo:embed組み込み(scripts/build-frontend.shでweb/distをinternal/webui/distへコピーしコミット、cmd/sakutei-view/main.goのmuxに\\\"/\\\"ハンドラとして登録)を実装。実機検証で単一バイナリ(go build ./cmd/sakutei-view)を起動しブラウザでアクセス、構成図・Sakuteiサマリー・依存DAG(波)・ノード一覧・ライブイベントタイムラインが全て表示されコンソールエラー0件を確認。副産物として実機検証中にaggregate.Snapshot().Linksがcontainerlab未到達時にJSON nullになりフロントエンドがクラッシュするバグを発見、Go側でlinksをnilガードしTopologyDiagram.tsx側にも?? []の防御を追加、回帰テストも追加(TestAggregator_Snapshot_LinksNeverNull)。go vet/go test/npm run build/npm run lint全て通過。mainにpush済み(コミットd961971)。段(1)の子タスクは全てdoneとなり、段(1)「読むだけの画面」が完了。",
       "refs": [],
       "threads": [],
       "createdAt": "2026-10-28T09:17:43.599Z",
-      "updatedAt": "2026-10-28T09:17:43.599Z",
-      "closedAt": null,
+      "updatedAt": "2026-10-28T11:53:44.901Z",
+      "closedAt": "2026-10-28T11:53:44.901Z",
       "extra": {}
     },
     {
