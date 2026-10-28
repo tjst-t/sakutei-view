@@ -3,6 +3,7 @@ package plugin
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -43,6 +44,20 @@ type apiError struct {
 
 func (e *apiError) Error() string {
 	return fmt.Sprintf("plugin: %s %s: unexpected status %d: %s", e.Method, e.Path, e.StatusCode, e.Body)
+}
+
+// StatusCodeOf returns the HTTP status code the plugin responded with, if
+// err originated from an unexpected-status response to one of this
+// client's calls (e.g. a 404 from GET /plugin/runs/{run_id} for an unknown
+// run id), and true. Returns (0, false) for any other error (a transport
+// failure, a cancelled context, a JSON-decoding error, ...), for which
+// there is no meaningful plugin-side status code to forward.
+func StatusCodeOf(err error) (int, bool) {
+	var ae *apiError
+	if errors.As(err, &ae) {
+		return ae.StatusCode, true
+	}
+	return 0, false
 }
 
 func (c *Client) do(ctx context.Context, method, path string, body io.Reader) (*http.Response, error) {

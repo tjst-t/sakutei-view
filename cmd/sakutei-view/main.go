@@ -72,7 +72,15 @@ func run() error {
 		return fmt.Errorf("resolving BASIC_AUTH_PASSWORD: %w", err)
 	}
 	apiServer := &api.Server{
-		Aggregator:        agg,
+		Aggregator: agg,
+		// The write/action endpoints (GET /api/scripts, POST
+		// /api/actions/{scriptID}/{action}, GET /api/runs/{runID}) are only
+		// actually registered by RegisterRoutes when both Plugin is non-nil
+		// here AND Basic auth is configured below (see
+		// api.Server.actionsEnabled) — so simply wiring pluginClient through
+		// does not by itself expose a write path on a deployment without
+		// Basic auth.
+		Plugin:            pluginClient,
 		BasicAuthUser:     os.Getenv("BASIC_AUTH_USER"),
 		BasicAuthPassword: basicAuthPassword,
 	}
