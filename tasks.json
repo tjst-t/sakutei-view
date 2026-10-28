@@ -398,7 +398,7 @@
       "number": 17,
       "kind": "task",
       "title": "操作パネルUI(台本選択・ずらす/直す・runステータス表示)",
-      "status": "ready",
+      "status": "in-progress",
       "parent": "2",
       "dependsOn": [
         "actions-backend"
@@ -410,9 +410,14 @@
       "doneWhen": "example-plugin+実物Goバックエンド+ブラウザで、台本を選び「ずらす」を押すと構成図のstorage01ノードが赤くなりイベントログにDisturbedが流れ、runステータスがsucceededになることを確認する。続けて「直す」を押すと元のok色に戻りFixedイベントが流れることを確認する。連打で2回目のクリックが409として扱われreason/busy_byが表示されることも確認する。Basic認証を設定していないバックエンドではOperationsPanelが表示されないことも確認する。npm run build/lintが通ること。",
       "resolution": null,
       "refs": [],
-      "threads": [],
+      "threads": [
+        {
+          "projectId": "81b644b5-62e7-4e30-89f6-7f68ccf39742",
+          "threadId": "81c59ff7-31c9-48fb-ba57-805dbbfcb608"
+        }
+      ],
       "createdAt": "2026-10-28T12:04:58.296Z",
-      "updatedAt": "2026-10-28T12:04:58.296Z",
+      "updatedAt": "2026-10-28T12:13:06.292Z",
       "closedAt": null,
       "extra": {}
     }
