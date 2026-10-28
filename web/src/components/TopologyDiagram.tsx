@@ -173,7 +173,7 @@ export function TopologyDiagram({ nodes, links }: Props) {
     if (!cy) return
     const handler = (evt: cytoscape.EventObject) => {
       const n = evt.target as NodeSingular
-      const found = nodes.find((x) => x.name === n.id())
+      const found = (nodes ?? []).find((x) => x.name === n.id())
       setSelected(found ?? null)
     }
     const clearHandler = () => setSelected(null)
@@ -196,7 +196,7 @@ export function TopologyDiagram({ nodes, links }: Props) {
   useEffect(() => {
     setSelected((prev) => {
       if (!prev) return prev
-      return nodes.find((n) => n.name === prev.name) ?? null
+      return (nodes ?? []).find((n) => n.name === prev.name) ?? null
     })
   }, [nodes])
 
@@ -205,9 +205,9 @@ export function TopologyDiagram({ nodes, links }: Props) {
     const cy = cyRef.current
     if (!cy) return
 
-    const wantNodes = new Map(nodes.map((n) => [n.name, n]))
+    const wantNodes = new Map((nodes ?? []).map((n) => [n.name, n]))
     const wantEdges = new Map(
-      links
+      (links ?? [])
         .map((l, i) => [linkId(l, i), l] as const)
         .filter(([, l]) => l.a.node && l.b.node),
     )

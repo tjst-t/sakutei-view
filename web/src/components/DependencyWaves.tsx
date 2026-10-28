@@ -40,8 +40,8 @@ export function DependencyWaves({ graph }: { graph?: SakuteiGraph }) {
             style={{
               fontSize: 11,
               color: 'var(--text-faint)',
-              textTransform: 'uppercase',
-              letterSpacing: 0.4,
+              borderBottom: '1px solid var(--border)',
+              paddingBottom: 6,
             }}
           >
             wave {i}

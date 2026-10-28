@@ -33,7 +33,7 @@ export function SourceHealthPanel({
 }) {
   return (
     <section>
-      <h2 style={{ fontSize: 13, fontWeight: 600, margin: '0 0 10px' }}>
+      <h2 style={{ fontSize: 15, fontWeight: 600, letterSpacing: 0.1, margin: '0 0 14px' }}>
         Sources
       </h2>
       <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>

@@ -574,10 +574,18 @@ func (a *Aggregator) Snapshot(ctx context.Context) (Snapshot, error) {
 		byName[n.Name] = i
 	}
 
+	links := topo.Links
+	if links == nil {
+		// Keep this an empty array rather than JSON null in the common case
+		// (containerlab has no links to report yet, or was never reachable):
+		// callers treat Nodes/Links as always-arrays, matching Nodes above.
+		links = []containerlab.Link{}
+	}
+
 	snap := Snapshot{
 		GeneratedAt: time.Now().UTC(),
 		Nodes:       nodes,
-		Links:       topo.Links,
+		Links:       links,
 		Health:      a.healthSnapshot(),
 	}
 

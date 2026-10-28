@@ -1,3 +1,4 @@
+import type { CSSProperties } from 'react'
 import { useEffect, useRef, useState } from 'react'
 import { fetchSnapshot, subscribeEvents, type EventStreamStatus } from './api/client'
 import type { LiveEvent, Snapshot } from './api/types'
@@ -68,6 +69,7 @@ export default function App() {
         minHeight: '100%',
         display: 'flex',
         flexDirection: 'column',
+        borderTop: '2px solid var(--accent)',
       }}
     >
       <header
@@ -79,7 +81,10 @@ export default function App() {
           borderBottom: '1px solid var(--border)',
         }}
       >
-        <h1 style={{ fontSize: 16, fontWeight: 600, margin: 0 }}>
+        <h1
+          className="mono"
+          style={{ fontSize: 18, fontWeight: 600, letterSpacing: 0.2, margin: 0 }}
+        >
           sakutei-view
         </h1>
         <span style={{ color: 'var(--text-muted)', fontSize: 13 }}>
@@ -98,7 +103,7 @@ export default function App() {
       {snapshotError && (
         <div
           style={{
-            margin: 16,
+            margin: '16px 24px 0',
             padding: 12,
             border: '1px solid var(--status-down)',
             borderRadius: 4,
@@ -109,16 +114,7 @@ export default function App() {
         </div>
       )}
 
-      <div
-        style={{
-          flex: 1,
-          display: 'grid',
-          gridTemplateColumns: '260px 1fr',
-          gap: 24,
-          padding: 24,
-          alignItems: 'start',
-        }}
-      >
+      <div className="layout" style={{ flex: 1 }}>
         <aside
           style={{
             background: 'var(--surface)',
@@ -134,18 +130,9 @@ export default function App() {
           )}
         </aside>
 
-        <main style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-          <section
-            style={{
-              background: 'var(--surface)',
-              border: '1px solid var(--border)',
-              borderRadius: 6,
-              padding: 16,
-            }}
-          >
-            <h2 style={{ fontSize: 13, fontWeight: 600, margin: '0 0 12px' }}>
-              Topology
-            </h2>
+        <main style={{ display: 'flex', flexDirection: 'column', gap: 28 }}>
+          <section>
+            <h2 style={sectionTitle}>Topology</h2>
             {snapshot ? (
               <TopologyDiagram nodes={snapshot.nodes} links={snapshot.links} />
             ) : (
@@ -159,19 +146,31 @@ export default function App() {
               border: '1px solid var(--border)',
               borderRadius: 6,
               padding: 16,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 20,
             }}
           >
-            <h2 style={{ fontSize: 13, fontWeight: 600, margin: '0 0 12px' }}>
-              Sakutei summary
-            </h2>
-            {snapshot ? (
-              <SakuteiSummaryPanel
-                summary={snapshot.sakutei_summary}
-                stopReasons={snapshot.sakutei_stop_reasons}
-              />
-            ) : (
-              <Loading />
-            )}
+            <div>
+              <h2 style={sectionTitle}>Sakutei</h2>
+              {snapshot ? (
+                <SakuteiSummaryPanel
+                  summary={snapshot.sakutei_summary}
+                  stopReasons={snapshot.sakutei_stop_reasons}
+                />
+              ) : (
+                <Loading />
+              )}
+            </div>
+
+            <div style={{ borderTop: '1px solid var(--border)', paddingTop: 18 }}>
+              <h3 style={subsectionTitle}>Dependency graph (waves)</h3>
+              {snapshot ? (
+                <DependencyWaves graph={snapshot.sakutei_graph} />
+              ) : (
+                <Loading />
+              )}
+            </div>
           </section>
 
           <section
@@ -182,27 +181,7 @@ export default function App() {
               padding: 16,
             }}
           >
-            <h2 style={{ fontSize: 13, fontWeight: 600, margin: '0 0 12px' }}>
-              Dependency graph (waves)
-            </h2>
-            {snapshot ? (
-              <DependencyWaves graph={snapshot.sakutei_graph} />
-            ) : (
-              <Loading />
-            )}
-          </section>
-
-          <section
-            style={{
-              background: 'var(--surface)',
-              border: '1px solid var(--border)',
-              borderRadius: 6,
-              padding: 16,
-            }}
-          >
-            <h2 style={{ fontSize: 13, fontWeight: 600, margin: '0 0 12px' }}>
-              Nodes
-            </h2>
+            <h2 style={sectionTitle}>Nodes</h2>
             {snapshot ? <NodeList nodes={snapshot.nodes} /> : <Loading />}
           </section>
 
@@ -240,6 +219,20 @@ export default function App() {
       </div>
     </div>
   )
+}
+
+const sectionTitle: CSSProperties = {
+  fontSize: 15,
+  fontWeight: 600,
+  letterSpacing: 0.1,
+  margin: '0 0 14px',
+}
+
+const subsectionTitle: CSSProperties = {
+  fontSize: 13,
+  fontWeight: 600,
+  color: 'var(--text-muted)',
+  margin: '0 0 12px',
 }
 
 function Loading() {

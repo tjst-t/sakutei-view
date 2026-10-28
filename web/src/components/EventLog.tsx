@@ -36,7 +36,7 @@ export function EventLog({
           marginBottom: 10,
         }}
       >
-        <h2 style={{ fontSize: 13, fontWeight: 600, margin: 0 }}>
+        <h2 style={{ fontSize: 15, fontWeight: 600, letterSpacing: 0.1, margin: 0 }}>
           Live events
         </h2>
         <span

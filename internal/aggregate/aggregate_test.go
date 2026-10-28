@@ -2,6 +2,7 @@ package aggregate
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"sync/atomic"
@@ -202,6 +203,39 @@ func TestAggregator_Snapshot(t *testing.T) {
 	downNode := byName["down-node"]
 	if downNode.Sakutei != nil || downNode.Plugin != nil {
 		t.Errorf("down-node has an overlay, want none: %+v", downNode)
+	}
+}
+
+// TestAggregator_Snapshot_LinksNeverNull verifies that Snapshot.Links is
+// always a JSON array ([]), never null, even when containerlab has never
+// been polled successfully (a zero-value containerlab.Topology has a nil
+// Links slice). Frontend code treats Nodes/Links as always-arrays; a null
+// here previously crashed the topology diagram.
+func TestAggregator_Snapshot_LinksNeverNull(t *testing.T) {
+	cl := mockContainerlabSource{topo: containerlab.Topology{}} // zero value: Nodes and Links both nil
+	agg := New(cl, nil, nil)
+
+	snap, err := agg.Snapshot(context.Background())
+	if err != nil {
+		t.Fatalf("Snapshot: %v", err)
+	}
+	if snap.Links == nil {
+		t.Fatalf("Links = nil, want a non-nil (possibly empty) slice so it serializes as [] not null")
+	}
+	if len(snap.Links) != 0 {
+		t.Errorf("Links = %+v, want empty", snap.Links)
+	}
+
+	b, err := json.Marshal(snap)
+	if err != nil {
+		t.Fatalf("Marshal: %v", err)
+	}
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(b, &raw); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	if string(raw["links"]) != "[]" {
+		t.Errorf(`links JSON = %s, want "[]"`, raw["links"])
 	}
 }
 

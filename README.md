@@ -103,15 +103,35 @@ go build ./cmd/sakutei-view
 CONTAINERLAB_SOURCE=plugin PLUGIN_BASE_URL=http://127.0.0.1:8081 ./sakutei-view
 ```
 
+`go build ./cmd/sakutei-view` is all that's needed to get a complete,
+web-UI-included binary — the frontend's build output is already embedded
+(see [internal/webui](internal/webui)) and committed to this repository, so
+building sakutei-view itself never requires Node.js or a network fetch. The
+resulting binary serves the web UI at `/` alongside the JSON/SSE API at
+`/api/snapshot` and `/api/events`.
+
 ## Web UI
 
 The browser-facing page lives under [web/](web/) (React + TypeScript + Vite +
 Cytoscape.js) and talks only to this binary's `/api/snapshot` and
 `/api/events`. See [web/README.md](web/README.md) for its own dev workflow
 (`npm install && npm run dev`, proxied to a `go run ./cmd/sakutei-view`
-instance). It is not embedded into the Go binary yet — that lands with
-Backlog's `embed` task, once the topology diagram, dependency DAG, and event
-timeline it depends on are built.
+instance).
+
+If you change anything under `web/src` (or `web`'s dependencies), rebuild
+the embedded copy and commit it alongside your change:
+
+```sh
+scripts/build-frontend.sh
+```
+
+This runs `npm ci && npm run build` in `web/` and copies the result into
+[internal/webui/dist](internal/webui/dist), which is what `go:embed`
+actually packages into the binary. `internal/webui/dist` is generated
+output but is checked into git on purpose, specifically so that a plain
+`go build ./cmd/sakutei-view` on a fresh checkout — with no `npm install`,
+no network access, no Node.js — produces the full single-binary
+deployment.
 
 ## License
 

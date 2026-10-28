@@ -23,6 +23,7 @@ import (
 	"github.com/tjst-t/sakutei-view/internal/source/containerlab"
 	"github.com/tjst-t/sakutei-view/internal/source/plugin"
 	"github.com/tjst-t/sakutei-view/internal/source/sakutei"
+	"github.com/tjst-t/sakutei-view/internal/webui"
 )
 
 func main() {
@@ -82,6 +83,10 @@ func run() error {
 		_, _ = w.Write([]byte("ok"))
 	})
 	apiServer.RegisterRoutes(mux)
+	// The embedded frontend is registered last, at the least specific
+	// pattern ("/"), so ServeMux's longest-match-wins rule always prefers
+	// the more specific /api/* and /healthz patterns above over it.
+	mux.Handle("/", http.FileServerFS(webui.FS()))
 
 	log.Printf("sakutei-view listening on %s", addr)
 	return http.ListenAndServe(addr, mux)

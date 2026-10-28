@@ -68,12 +68,10 @@ export function SakuteiSummaryPanel({
         <div>
           <h3
             style={{
-              fontSize: 11,
+              fontSize: 13,
               fontWeight: 600,
-              textTransform: 'uppercase',
-              letterSpacing: 0.4,
               margin: '0 0 8px',
-              color: 'var(--text-faint)',
+              color: 'var(--status-down)',
             }}
           >
             Halted ({stopReasons.length})

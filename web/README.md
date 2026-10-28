@@ -2,10 +2,10 @@
 
 React + TypeScript + Vite + [Cytoscape.js](https://js.cytoscape.org/), built
 against sakutei-view's own `GET /api/snapshot` and `GET /api/events` (see
-[../README.md](../README.md)). This is a scaffold: it fetches the current
-snapshot, shows each source's health, lists nodes with their color-coded
-state, and follows the live event stream. The topology diagram itself
-(Cytoscape.js canvas, see Backlog `item-2`) is not built here yet.
+[../README.md](../README.md)). It shows the containerlab topology (as a
+Cytoscape.js diagram, color-coded by each node's Sakutei/plugin-derived
+state), Sakutei's resource summary and halted-reason list, its dependency
+graph grouped by wave, a table of nodes, and a live merged event timeline.
 
 ## Developing
 
@@ -28,6 +28,19 @@ VITE_API_PROXY_TARGET=http://127.0.0.1:9000 npm run dev
 `npm run build` type-checks (`tsc -b`) and produces a static `dist/`;
 `npm run lint` runs [oxlint](https://oxc.rs/).
 
-The eventual production binary embeds this `dist/` into the Go binary (see
-Backlog `embed`) so a deployment is a single executable with no Node.js
-involved.
+## Production build / embedding into the Go binary
+
+The production binary embeds this frontend's build output directly (see
+[../internal/webui](../internal/webui)), so a deployment is a single
+executable with no Node.js involved. That embedded copy is **not** rebuilt
+automatically — it lives, committed, under `../internal/webui/dist`. After
+changing anything here, refresh it and commit the result:
+
+```sh
+../scripts/build-frontend.sh
+```
+
+This runs `npm ci && npm run build` in this directory and copies `dist/`
+into `../internal/webui/dist`. Without this step, `go build
+./cmd/sakutei-view` will keep serving whatever frontend build was last
+committed, not your local changes.
