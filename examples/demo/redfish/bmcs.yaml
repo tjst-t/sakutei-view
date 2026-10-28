@@ -1,0 +1,24 @@
+# Reference-only --redfish-config for the sakutei-view demo (optional,
+# NOT part of the verified disturb/fix path -- see examples/demo/README.md).
+#
+# Modeled on the real schema documented in Sakutei's own
+# docs/providers/redfish.md (github.com/tjst-t/sakutei, tag v2.6.0).
+# Not exercised against a real BMC in this repository's own development:
+# this environment has no containerlab/KVM to bring up the qemu-bmc node
+# in examples/demo/topology.clab.yml, so this file has not itself been
+# used with `sakutei plan --redfish-config examples/demo/redfish/bmcs.yaml`.
+#
+# address below matches server01's mgmt-ipv4 in examples/demo/topology.clab.yml.
+# qemu-bmc's Redfish endpoint uses a self-signed certificate, hence
+# insecure_skip_verify (acceptable for this throwaway demo lab only --
+# sakutei-view's own internal/httpclient never offers a TLS-verification-skip
+# option; this is Sakutei's own, separate --redfish-config, for a demo BMC
+# that has no real CA).
+secret_store: secrets.json
+
+bmcs:
+  server01:
+    address: https://172.30.30.11
+    username: admin
+    password: secretref:file/bmc/server01
+    insecure_skip_verify: true

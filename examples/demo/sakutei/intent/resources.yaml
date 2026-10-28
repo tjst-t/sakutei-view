@@ -1,0 +1,42 @@
+# Sakutei intent for the demo topology (examples/demo/topology.clab.yml).
+#
+# Two providers, both file-based and requiring no special privilege:
+#
+#   - dnszone: two A records for a generic example.test zone, standing in
+#     for "dns1" in the topology.
+#   - nftables (ruleset_target: file, the default): one regular chain,
+#     standing in for "fw1" in the topology.
+#
+# Verified against the real, current public Sakutei (see
+# examples/demo/README.md) with:
+#
+#   sakutei plan      --intent intent --zone zone.db --ruleset ruleset.conf
+#   sakutei reconcile --intent intent --zone zone.db --ruleset ruleset.conf
+#
+# zone.db and ruleset.conf are not committed: Sakutei creates both from
+# nothing on the first reconcile (a missing file reads as "empty"), and
+# they are regenerated identically by anyone who runs this intent.
+resources:
+  - provider: dnszone
+    id: www.example.test./A
+    fields:
+      name: www.example.test.
+      type: A
+      value: 10.10.0.10
+      ttl: 300
+
+  - provider: dnszone
+    id: mail.example.test./A
+    fields:
+      name: mail.example.test.
+      type: A
+      value: 10.10.0.20
+      ttl: 300
+
+  - provider: nftables
+    id: inet/filter/web
+    fields:
+      family: inet
+      table: filter
+      chain: web
+      rules: "tcp dport 22 accept ; tcp dport { 80, 443 } ct state established,new counter accept comment \"web\" ; ip saddr 10.0.0.0/8 drop"

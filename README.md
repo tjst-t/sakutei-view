@@ -113,6 +113,14 @@ building sakutei-view itself never requires Node.js or a network fetch. The
 resulting binary serves the web UI at `/` alongside the JSON/SSE API at
 `/api/snapshot` and `/api/events`.
 
+## Trying it end to end
+
+[examples/demo](examples/demo) has a small, generic configuration (a
+containerlab topology, a Sakutei intent, and the example plugin) for seeing
+the whole flow — drift happening, Sakutei fixing it, the view updating live
+via `/api/events` — without any real deployment. It documents exactly what
+has and hasn't been verified against the real public Sakutei release.
+
 ## Web UI
 
 The browser-facing page lives under [web/](web/) (React + TypeScript + Vite +

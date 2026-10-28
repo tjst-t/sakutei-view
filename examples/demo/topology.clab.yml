@@ -1,0 +1,75 @@
+# Reference-only containerlab topology for the sakutei-view demo.
+#
+# NOT executed or verified by this repository's own development process:
+# this environment cannot run containerlab (no network namespaces /
+# privileged container runtime available here), so this file has not
+# itself been started with `containerlab deploy`. See examples/demo/README.md
+# for exactly what was verified instead, and how.
+#
+# It exists to give the demo a plausible, generic shape -- one small
+# BMC-equipped server plus two simple hosts -- matching the resources in
+# examples/demo/sakutei/intent/resources.yaml (dnszone, nftables) and
+# examples/demo/redfish/ (redfish-system, optional). None of the node names
+# or addresses below refer to any real deployment; they are placeholders.
+#
+# Node roles in this demo:
+#   - server01: a BMC-equipped server. Modeled directly on Sakutei's own
+#     upstream integration-test topology (tests/integration/redfish/
+#     topology.clab.yml in github.com/tjst-t/sakutei, tag v2.6.0), which
+#     uses ghcr.io/tjst-t/qemu-bmc -- a small QEMU VM with a Redfish BMC
+#     attached, built for exactly this kind of test/demo use. The image
+#     and digest below are copied verbatim from that upstream file.
+#   - dns1, fw1: plain placeholder hosts. The dnszone and nftables
+#     resources in this demo's Sakutei intent are file-based (they manage
+#     a local zone file / nftables ruleset file, not a running container's
+#     network namespace), so these two nodes are illustrative only -- they
+#     give the topology a "DNS server" and "firewall" to point at, but
+#     Sakutei does not reach into them for this demo. A real deployment
+#     wiring dnszone/nftables to these specific hosts would need
+#     containerlab exec / a live ruleset_target and is out of scope here.
+#
+# To try this for real, on a machine with containerlab, KVM (/dev/kvm) and
+# /dev/net/tun available:
+#
+#   containerlab deploy -t examples/demo/topology.clab.yml
+#
+name: sakutei-view-demo
+
+mgmt:
+  network: sakutei-view-demo
+  ipv4-subnet: 172.30.30.0/24
+
+topology:
+  nodes:
+    server01:
+      kind: linux
+      image: ghcr.io/tjst-t/qemu-bmc:0.11.0@sha256:3ab6ea901b1ae8a510a2a140113fd1d80ad0f3ad2c26327ab04ef94f95bbdfc9
+      mgmt-ipv4: 172.30.30.11
+      devices:
+        - /dev/kvm       # accel=kvm
+        - /dev/net/tun   # VM NIC passthrough (eth1)
+      env:
+        VM_MEMORY: "256"
+        VM_CPUS: "1"
+        IPMI_USER: "admin"
+        IPMI_PASS: "password"
+        VM_NETWORKS: "eth1"
+        VM_MACS: "52:54:00:30:30:11"
+        SYSTEM_UUID: "6f1b7c52-0e1a-4d2b-9c11-000000003011"
+        GRACEFUL_TIMEOUT: "10"
+
+    dns1:
+      kind: linux
+      image: alpine:3
+      mgmt-ipv4: 172.30.30.21
+      cmd: sleep infinity
+
+    fw1:
+      kind: linux
+      image: alpine:3
+      mgmt-ipv4: 172.30.30.22
+      cmd: sleep infinity
+
+  links:
+    - endpoints: ["server01:eth1", "fw1:eth1"]
+    - endpoints: ["fw1:eth2", "dns1:eth1"]
