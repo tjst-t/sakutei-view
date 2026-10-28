@@ -36,11 +36,11 @@
       "labels": [],
       "body": "git化・LICENSE(Apache-2.0)・README・go.mod・docs/plugin-contract.md(v0.1)・examples/example-pluginを作成済み。mainにpush済み(コミット624a6af)。",
       "doneWhen": "go build ./... が通り、docs/plugin-contract.mdとexamples/example-pluginがmainにpush済み。",
-      "resolution": "段(2)「デモ操作」完了。子タスクactions-backend(コミット37dbd7e)・actions-ui(コミット67e37ec)とも実装・実機検証・push済み。差し込み口のactions系エンドポイント(GET /api/scripts、POST /api/actions/{scriptID}/{action}、GET /api/runs/{runID})をBasic認証+差し込み口設定済みの場合のみ有効化し、フロントエンドのOperationsPanelから台本選択→Disturb→赤(amber/drift)化→イベントログ反映→runステータスSucceeded、409時のreason/busy_by表示、Fix→ok復帰、Basic認証未設定時はパネル非表示、をexample-plugin+モックclab-api-server+実物Goバックエンド+実ブラウザで確認。",
+      "resolution": "完了。git化・LICENSE・README・go.mod・docs/plugin-contract.md(v0.1)・examples/example-pluginを作成し、コミット624a6afとしてmainにpush済み。go build ./...・go vet ./...・gofmt -lで確認済み。example-pluginの動作もcurlで疎通確認済み。",
       "refs": [],
       "threads": [],
       "createdAt": "2026-10-28T09:17:43.599Z",
-      "updatedAt": "2026-10-28T12:27:24.417Z",
+      "updatedAt": "2026-10-28T12:27:40.379Z",
       "closedAt": "2026-10-28T09:17:57.690Z",
       "extra": {}
     },
