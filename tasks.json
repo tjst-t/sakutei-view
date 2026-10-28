@@ -74,7 +74,9 @@
       "title": "Sakuteiデータソース",
       "status": "ready",
       "parent": "1",
-      "dependsOn": [],
+      "dependsOn": [
+        "https-ca-bearer"
+      ],
       "milestone": null,
       "priority": "normal",
       "labels": [],
@@ -84,7 +86,7 @@
       "refs": [],
       "threads": [],
       "createdAt": "2026-10-28T09:17:43.599Z",
-      "updatedAt": "2026-10-28T09:17:43.599Z",
+      "updatedAt": "2026-10-28T09:52:20.230Z",
       "closedAt": null,
       "extra": {}
     },
