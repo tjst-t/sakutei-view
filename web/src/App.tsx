@@ -6,6 +6,7 @@ import { NodeList } from './components/NodeList'
 import { SakuteiSummaryPanel } from './components/SakuteiSummaryPanel'
 import { SourceHealthPanel } from './components/SourceHealthPanel'
 import { StatusDot } from './components/StatusDot'
+import { TopologyDiagram } from './components/TopologyDiagram'
 
 // How often to re-fetch GET /api/snapshot in the background. Page (1)'s
 // scope is a working read-only poll + SSE loop; a push-driven snapshot
@@ -133,6 +134,24 @@ export default function App() {
         </aside>
 
         <main style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+          <section
+            style={{
+              background: 'var(--surface)',
+              border: '1px solid var(--border)',
+              borderRadius: 6,
+              padding: 16,
+            }}
+          >
+            <h2 style={{ fontSize: 13, fontWeight: 600, margin: '0 0 12px' }}>
+              Topology
+            </h2>
+            {snapshot ? (
+              <TopologyDiagram nodes={snapshot.nodes} links={snapshot.links} />
+            ) : (
+              <Loading />
+            )}
+          </section>
+
           <section
             style={{
               background: 'var(--surface)',
