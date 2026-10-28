@@ -23,13 +23,13 @@ const (
 // distinction both sources make (Sakutei's Event.State, the plugin's
 // Event.Level); it is empty for one-shot events that have no such notion.
 type Event struct {
-	Source   EventSource
-	Time     time.Time
-	Kind     string
-	Severity string // Sakutei only; always empty for plugin events
-	State    string // "firing" | "resolved" | ""
-	Resource string
-	Message  string
+	Source   EventSource `json:"source"`
+	Time     time.Time   `json:"time"`
+	Kind     string      `json:"kind"`
+	Severity string      `json:"severity,omitempty"` // Sakutei only; always empty for plugin events
+	State    string      `json:"state,omitempty"`    // "firing" | "resolved" | ""
+	Resource string      `json:"resource,omitempty"`
+	Message  string      `json:"message"`
 }
 
 func normalizeSakuteiEvent(ev sakutei.Event) Event {

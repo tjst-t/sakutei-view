@@ -12,24 +12,24 @@ import "context"
 // clab-api-server's models.ClabContainerInfo or containerlab's own
 // `inspect --format json` output (the two shapes overlap; see rawjson.go).
 type Node struct {
-	LabName string
-	Name    string
-	Kind    string // e.g. "linux", "nokia_srlinux"
-	Image   string
-	State   string // e.g. "running"
-	Status  string // e.g. "Up 18 hours"
-	IPv4    string
-	IPv6    string
-	Owner   string
-	Group   string // only present when the source provides it (clab-api-server); empty otherwise
+	LabName string `json:"lab_name,omitempty"`
+	Name    string `json:"name"`
+	Kind    string `json:"kind,omitempty"` // e.g. "linux", "nokia_srlinux"
+	Image   string `json:"image,omitempty"`
+	State   string `json:"state,omitempty"`  // e.g. "running"
+	Status  string `json:"status,omitempty"` // e.g. "Up 18 hours"
+	IPv4    string `json:"ipv4,omitempty"`
+	IPv6    string `json:"ipv6,omitempty"`
+	Owner   string `json:"owner,omitempty"`
+	Group   string `json:"group,omitempty"` // only present when the source provides it (clab-api-server); empty otherwise
 }
 
 // LinkEndpoint is one side of a Link.
 type LinkEndpoint struct {
-	Node      string
-	Interface string
-	MAC       string
-	State     string
+	Node      string `json:"node"`
+	Interface string `json:"interface,omitempty"`
+	MAC       string `json:"mac,omitempty"`
+	State     string `json:"state,omitempty"`
 }
 
 // Link is a connection between two node interfaces. Only clab-api-server
@@ -37,9 +37,9 @@ type LinkEndpoint struct {
 // containerlab's own inspect output, which has no link information, so
 // Topology.Links is always empty for PluginSource.
 type Link struct {
-	Type string // "veth" or "macvlan"
-	A    LinkEndpoint
-	B    LinkEndpoint
+	Type string       `json:"type"` // "veth" or "macvlan"
+	A    LinkEndpoint `json:"a"`
+	B    LinkEndpoint `json:"b"`
 }
 
 // Topology is the normalized result of fetching a lab's nodes and links.

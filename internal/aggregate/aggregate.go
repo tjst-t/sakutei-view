@@ -41,32 +41,32 @@ const (
 // containerlab node it was matched to (see package doc for the matching
 // convention).
 type SakuteiOverlay struct {
-	ResourceID string
+	ResourceID string `json:"resource_id"`
 	// State is one of Sakutei's ResourceStatus.State values: conformant,
 	// drift, unobservable, unmanaged, workflow, oscillating.
-	State string
+	State string `json:"state"`
 	// ApplyFailed is true when State is "oscillating" and Sakutei reports
 	// it stopped retrying (ResourceStatus.ApplyStopped != nil).
-	ApplyFailed   bool
-	DriftedFields []string
+	ApplyFailed   bool     `json:"apply_failed,omitempty"`
+	DriftedFields []string `json:"drifted_fields,omitempty"`
 }
 
 // PluginOverlay is a device plugin resource's status, attached to the
 // containerlab node named by its Node field.
 type PluginOverlay struct {
-	ResourceID string
+	ResourceID string `json:"resource_id"`
 	// State is one of the plugin contract's Resource.State values: ok,
 	// drifted, unknown, error.
-	State         string
-	DriftedFields []string
+	State         string   `json:"state"`
+	DriftedFields []string `json:"drifted_fields,omitempty"`
 }
 
 // Node is one containerlab node plus whatever Sakutei/plugin overlays were
 // matched to it.
 type Node struct {
 	containerlab.Node
-	Sakutei *SakuteiOverlay
-	Plugin  *PluginOverlay
+	Sakutei *SakuteiOverlay `json:"sakutei,omitempty"`
+	Plugin  *PluginOverlay  `json:"plugin,omitempty"`
 }
 
 // Color decides the node's overall color. containerlab liveness takes
@@ -125,13 +125,13 @@ func colorForPluginState(state string) (Color, bool) {
 
 // Snapshot is the aggregator's combined, point-in-time view.
 type Snapshot struct {
-	GeneratedAt time.Time
-	Nodes       []Node
-	Links       []containerlab.Link
+	GeneratedAt time.Time           `json:"generated_at"`
+	Nodes       []Node              `json:"nodes"`
+	Links       []containerlab.Link `json:"links"`
 	// SakuteiSummary is Sakutei's own resource counts (GET /status's
 	// "summary"), nil if no Sakutei client is configured or it has not
 	// observed reality yet (sakutei.NotYet).
-	SakuteiSummary *sakutei.Summary
+	SakuteiSummary *sakutei.Summary `json:"sakutei_summary,omitempty"`
 }
 
 // Aggregator combines the three sources. Sakutei and Plugin may be nil if
