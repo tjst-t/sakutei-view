@@ -182,6 +182,38 @@ func colorForPluginState(state string) (Color, bool) {
 	}
 }
 
+// StopReason is one reason some part of Sakutei's reconcile cycle is
+// currently halted: either a single resource that Sakutei gave up retrying
+// (its own apply_stopped reason), a cycle-wide gate (the budget or
+// capacity limiter tripping), or a provider's prune being held back.
+type StopReason struct {
+	// Scope is "resource", "budget", "capacity" or "prune".
+	Scope string `json:"scope"`
+	// Target is the resource id (scope=resource) or provider name
+	// (scope=prune); empty for the cycle-wide budget/capacity gates.
+	Target string `json:"target,omitempty"`
+	Reason string `json:"reason,omitempty"`
+}
+
+// GraphNode is one resource's position in Sakutei's dependency graph (GET
+// /graph), grouped under SakuteiGraph.Waves.
+type GraphNode struct {
+	ID         string `json:"id"`
+	Wave       int    `json:"wave"`
+	Ready      bool   `json:"ready"`
+	WaitingFor string `json:"waiting_for,omitempty"`
+	External   bool   `json:"external,omitempty"`
+}
+
+// SakuteiGraph is Sakutei's dependency graph (GET /graph), with resources
+// grouped into the waves they become ready in: Waves[i] lists the
+// resources computed in Sakutei's i-th wave (see Sakutei's docs on
+// dependency ordering). A resource with Ready=false and WaitingFor set is
+// blocked on another resource in an earlier wave.
+type SakuteiGraph struct {
+	Waves [][]GraphNode `json:"waves"`
+}
+
 // Snapshot is the aggregator's combined, point-in-time view.
 type Snapshot struct {
 	GeneratedAt time.Time           `json:"generated_at"`
@@ -192,6 +224,14 @@ type Snapshot struct {
 	// observed reality yet (sakutei.NotYet), or it is currently
 	// unreachable and no prior successful read exists to fall back to.
 	SakuteiSummary *sakutei.Summary `json:"sakutei_summary,omitempty"`
+	// SakuteiStopReasons lists every reason (from GET /status and GET
+	// /plan) something in Sakutei's reconcile cycle is currently halted.
+	// Empty (nil) when nothing is halted, or Sakutei/its plan is
+	// unavailable.
+	SakuteiStopReasons []StopReason `json:"sakutei_stop_reasons,omitempty"`
+	// SakuteiGraph is Sakutei's dependency graph (GET /graph), nil if no
+	// Sakutei client is configured or it has never answered successfully.
+	SakuteiGraph *SakuteiGraph `json:"sakutei_graph,omitempty"`
 	// Health reports, per source, whether it is configured and whether the
 	// most recent read succeeded. See SourceHealth.
 	Health map[SourceName]SourceHealth `json:"health"`
@@ -215,12 +255,14 @@ type Aggregator struct {
 	ReconnectInitial time.Duration
 	ReconnectMax     time.Duration
 
-	mu             sync.Mutex
-	health         map[SourceName]SourceHealth
-	haveTopology   bool
-	cachedTopology containerlab.Topology
-	cachedSakutei  *sakutei.StatusResponse
-	cachedPlugin   *plugin.StatusResponse
+	mu                 sync.Mutex
+	health             map[SourceName]SourceHealth
+	haveTopology       bool
+	cachedTopology     containerlab.Topology
+	cachedSakutei      *sakutei.StatusResponse
+	cachedSakuteiPlan  *sakutei.PlanResponse
+	cachedSakuteiGraph *sakutei.GraphResponse
+	cachedPlugin       *plugin.StatusResponse
 }
 
 // New returns an Aggregator. cl must not be nil; sk and pl may be nil.
@@ -352,6 +394,132 @@ func (a *Aggregator) fetchSakuteiStatus(ctx context.Context) *sakutei.StatusResp
 	}
 }
 
+// fetchSakuteiPlan polls Sakutei's /plan with a bounded deadline. Returns
+// nil if Sakutei is not configured, hasn't observed reality yet, or is
+// unreachable with no prior successful read to fall back to.
+//
+// This shares SourceSakutei's health entry with fetchSakuteiStatus and
+// fetchSakuteiGraph (all three read the same daemon); when they disagree
+// within one Snapshot call, the last one polled wins. In practice they
+// either all succeed or all fail together, since they hit the same
+// read-only listener.
+func (a *Aggregator) fetchSakuteiPlan(ctx context.Context) *sakutei.PlanResponse {
+	if a.Sakutei == nil {
+		return nil
+	}
+
+	reqCtx, cancel := context.WithTimeout(ctx, a.requestTimeout())
+	defer cancel()
+
+	plan, err := a.Sakutei.Plan(reqCtx)
+	switch {
+	case err == nil:
+		a.recordSuccess(SourceSakutei)
+		cp := plan
+		a.mu.Lock()
+		a.cachedSakuteiPlan = &cp
+		a.mu.Unlock()
+		return &plan
+	case sakutei.NotYet(err):
+		a.recordSuccess(SourceSakutei)
+		return nil
+	default:
+		a.recordError(SourceSakutei, err)
+		a.mu.Lock()
+		defer a.mu.Unlock()
+		return a.cachedSakuteiPlan
+	}
+}
+
+// fetchSakuteiGraph polls Sakutei's /graph with a bounded deadline. Returns
+// nil if Sakutei is not configured, hasn't observed reality yet, or is
+// unreachable with no prior successful read to fall back to.
+func (a *Aggregator) fetchSakuteiGraph(ctx context.Context) *sakutei.GraphResponse {
+	if a.Sakutei == nil {
+		return nil
+	}
+
+	reqCtx, cancel := context.WithTimeout(ctx, a.requestTimeout())
+	defer cancel()
+
+	graph, err := a.Sakutei.Graph(reqCtx)
+	switch {
+	case err == nil:
+		a.recordSuccess(SourceSakutei)
+		cp := graph
+		a.mu.Lock()
+		a.cachedSakuteiGraph = &cp
+		a.mu.Unlock()
+		return &graph
+	case sakutei.NotYet(err):
+		a.recordSuccess(SourceSakutei)
+		return nil
+	default:
+		a.recordError(SourceSakutei, err)
+		a.mu.Lock()
+		defer a.mu.Unlock()
+		return a.cachedSakuteiGraph
+	}
+}
+
+// buildStopReasons collects every reason (from /status's per-resource
+// apply_stopped, and /plan's budget/capacity gates and prune halts) that
+// part of Sakutei's reconcile cycle is currently halted. Returns nil if
+// neither status nor plan is available, or nothing is halted.
+func buildStopReasons(status *sakutei.StatusResponse, plan *sakutei.PlanResponse) []StopReason {
+	var out []StopReason
+	if status != nil {
+		for _, r := range status.Resources {
+			if r.ApplyStopped == nil {
+				continue
+			}
+			reason := r.ApplyStopped.Reason
+			if reason == "" {
+				reason = r.ApplyStopped.Note
+			}
+			out = append(out, StopReason{Scope: "resource", Target: r.LocalID, Reason: reason})
+		}
+	}
+	if plan != nil {
+		if plan.Budget != nil && plan.Budget.Halted {
+			out = append(out, StopReason{Scope: "budget", Reason: plan.Budget.Reason})
+		}
+		if plan.Capacity != nil && plan.Capacity.Halted {
+			out = append(out, StopReason{Scope: "capacity", Reason: plan.Capacity.Reason})
+		}
+		for _, ph := range plan.PruneHalts {
+			out = append(out, StopReason{Scope: "prune", Target: ph.Provider, Reason: ph.Reason})
+		}
+	}
+	return out
+}
+
+// buildGraph converts Sakutei's /graph response into a SakuteiGraph grouped
+// by wave, using GraphResponse.Waves for wave membership/order and
+// GraphResponse.Nodes for each resource's ready/waiting_for detail.
+func buildGraph(g sakutei.GraphResponse) *SakuteiGraph {
+	byID := make(map[string]sakutei.GraphNode, len(g.Nodes))
+	for _, n := range g.Nodes {
+		byID[n.ID] = n
+	}
+	waves := make([][]GraphNode, len(g.Waves))
+	for i, ids := range g.Waves {
+		nodes := make([]GraphNode, 0, len(ids))
+		for _, id := range ids {
+			n := byID[id]
+			nodes = append(nodes, GraphNode{
+				ID:         n.ID,
+				Wave:       n.Wave,
+				Ready:      n.Ready,
+				WaitingFor: n.WaitingFor,
+				External:   n.External,
+			})
+		}
+		waves[i] = nodes
+	}
+	return &SakuteiGraph{Waves: waves}
+}
+
 // fetchPluginStatus polls the plugin's /plugin/status with a bounded
 // deadline. Returns nil if the plugin is not configured or is unreachable
 // with no prior successful read to fall back to.
@@ -395,6 +563,8 @@ func (a *Aggregator) Snapshot(ctx context.Context) (Snapshot, error) {
 
 	topo := a.fetchTopology(ctx)
 	sakuteiStatus := a.fetchSakuteiStatus(ctx)
+	sakuteiPlan := a.fetchSakuteiPlan(ctx)
+	sakuteiGraph := a.fetchSakuteiGraph(ctx)
 	pluginStatus := a.fetchPluginStatus(ctx)
 
 	nodes := make([]Node, len(topo.Nodes))
@@ -409,6 +579,13 @@ func (a *Aggregator) Snapshot(ctx context.Context) (Snapshot, error) {
 		Nodes:       nodes,
 		Links:       topo.Links,
 		Health:      a.healthSnapshot(),
+	}
+
+	if stopReasons := buildStopReasons(sakuteiStatus, sakuteiPlan); len(stopReasons) > 0 {
+		snap.SakuteiStopReasons = stopReasons
+	}
+	if sakuteiGraph != nil {
+		snap.SakuteiGraph = buildGraph(*sakuteiGraph)
 	}
 
 	if sakuteiStatus != nil {

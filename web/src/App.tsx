@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { fetchSnapshot, subscribeEvents, type EventStreamStatus } from './api/client'
 import type { LiveEvent, Snapshot } from './api/types'
+import { DependencyWaves } from './components/DependencyWaves'
 import { EventLog } from './components/EventLog'
 import { NodeList } from './components/NodeList'
 import { SakuteiSummaryPanel } from './components/SakuteiSummaryPanel'
@@ -164,7 +165,28 @@ export default function App() {
               Sakutei summary
             </h2>
             {snapshot ? (
-              <SakuteiSummaryPanel summary={snapshot.sakutei_summary} />
+              <SakuteiSummaryPanel
+                summary={snapshot.sakutei_summary}
+                stopReasons={snapshot.sakutei_stop_reasons}
+              />
+            ) : (
+              <Loading />
+            )}
+          </section>
+
+          <section
+            style={{
+              background: 'var(--surface)',
+              border: '1px solid var(--border)',
+              borderRadius: 6,
+              padding: 16,
+            }}
+          >
+            <h2 style={{ fontSize: 13, fontWeight: 600, margin: '0 0 12px' }}>
+              Dependency graph (waves)
+            </h2>
+            {snapshot ? (
+              <DependencyWaves graph={snapshot.sakutei_graph} />
             ) : (
               <Loading />
             )}

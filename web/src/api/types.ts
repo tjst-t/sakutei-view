@@ -73,6 +73,27 @@ export interface SnapshotLink {
   b: LinkEndpoint
 }
 
+/** aggregate.StopReason */
+export interface StopReason {
+  scope: 'resource' | 'budget' | 'capacity' | 'prune'
+  target?: string
+  reason?: string
+}
+
+/** aggregate.GraphNode */
+export interface SakuteiGraphNode {
+  id: string
+  wave: number
+  ready: boolean
+  waiting_for?: string
+  external?: boolean
+}
+
+/** aggregate.SakuteiGraph */
+export interface SakuteiGraph {
+  waves: SakuteiGraphNode[][]
+}
+
 /** sakutei.Summary */
 export interface SakuteiSummary {
   conformant: number
@@ -92,6 +113,8 @@ export interface Snapshot {
   nodes: SnapshotNode[]
   links: SnapshotLink[]
   sakutei_summary?: SakuteiSummary
+  sakutei_stop_reasons?: StopReason[]
+  sakutei_graph?: SakuteiGraph
   health: Record<SourceName, SourceHealth>
 }
 

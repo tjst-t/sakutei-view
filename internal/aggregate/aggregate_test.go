@@ -49,13 +49,51 @@ const pluginStatusFixture = `{
   ]
 }`
 
+const sakuteiPlanFixture = `{
+  "schema_version": 1,
+  "generated_at": "2026-10-28T00:00:00Z",
+  "summary": {"changes": 0, "create": 0, "update": 0, "delete": 0, "destructive": 0, "blocked": 0,
+    "planned_change_lane": 0, "task": 0, "workflow": 0, "pending_allocations": 0, "unobservable": 0, "prune_halts": 0},
+  "operations": [],
+  "budget": {"halted": true, "halt": "destructive", "reason": "destructive budget exhausted"},
+  "prune_halts": [
+    {"provider": "containerlab", "reason": "count drop safety", "count_drop": true}
+  ]
+}`
+
+const sakuteiGraphFixture = `{
+  "schema_version": 1,
+  "generated_at": "2026-10-28T00:00:00Z",
+  "nodes": [
+    {"id": "res-leaf1", "provider": "containerlab", "scope": {}, "local_id": "leaf1",
+     "depends_on": [], "observed": true, "ready": true, "wave": 0},
+    {"id": "res-spine1", "provider": "containerlab", "scope": {}, "local_id": "spine1",
+     "depends_on": ["res-leaf1"], "observed": true, "ready": false, "waiting_for": "res-leaf1", "wave": 1}
+  ],
+  "edges": [
+    {"from": "res-leaf1", "to": "res-spine1"}
+  ],
+  "waves": [["res-leaf1"], ["res-spine1"]],
+  "summary": {"nodes": 2, "external": 0, "edges": 1, "waves": 2, "not_ready": 1}
+}`
+
 func newTestAggregator(t *testing.T) *Aggregator {
 	t.Helper()
 
-	sakuteiSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	sakuteiMux := http.NewServeMux()
+	sakuteiMux.HandleFunc("GET /status", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.Write([]byte(sakuteiStatusFixture))
-	}))
+	})
+	sakuteiMux.HandleFunc("GET /plan", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(sakuteiPlanFixture))
+	})
+	sakuteiMux.HandleFunc("GET /graph", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(sakuteiGraphFixture))
+	})
+	sakuteiSrv := httptest.NewServer(sakuteiMux)
 	t.Cleanup(sakuteiSrv.Close)
 
 	pluginMux := http.NewServeMux()
@@ -97,6 +135,32 @@ func TestAggregator_Snapshot(t *testing.T) {
 	}
 	if snap.SakuteiSummary == nil || snap.SakuteiSummary.Total != 2 {
 		t.Fatalf("SakuteiSummary = %+v, want Total=2", snap.SakuteiSummary)
+	}
+
+	if len(snap.SakuteiStopReasons) != 3 {
+		t.Fatalf("SakuteiStopReasons = %+v, want 3 entries", snap.SakuteiStopReasons)
+	}
+	wantReasons := map[string]StopReason{
+		"resource:spine1":    {Scope: "resource", Target: "spine1", Reason: "max retries exceeded"},
+		"budget:":            {Scope: "budget", Reason: "destructive budget exhausted"},
+		"prune:containerlab": {Scope: "prune", Target: "containerlab", Reason: "count drop safety"},
+	}
+	for _, got := range snap.SakuteiStopReasons {
+		key := got.Scope + ":" + got.Target
+		want, ok := wantReasons[key]
+		if !ok || got != want {
+			t.Errorf("unexpected StopReason %+v (want one of %+v)", got, wantReasons)
+		}
+	}
+
+	if snap.SakuteiGraph == nil || len(snap.SakuteiGraph.Waves) != 2 {
+		t.Fatalf("SakuteiGraph = %+v, want 2 waves", snap.SakuteiGraph)
+	}
+	if w0 := snap.SakuteiGraph.Waves[0]; len(w0) != 1 || w0[0].ID != "res-leaf1" || !w0[0].Ready {
+		t.Errorf("Waves[0] = %+v, want one ready node res-leaf1", w0)
+	}
+	if w1 := snap.SakuteiGraph.Waves[1]; len(w1) != 1 || w1[0].ID != "res-spine1" || w1[0].Ready || w1[0].WaitingFor != "res-leaf1" {
+		t.Errorf("Waves[1] = %+v, want one not-ready node res-spine1 waiting_for res-leaf1", w1)
 	}
 
 	byName := map[string]Node{}
