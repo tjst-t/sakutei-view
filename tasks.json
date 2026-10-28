@@ -345,6 +345,27 @@
       "updatedAt": "2026-10-28T10:52:04.359Z",
       "closedAt": "2026-10-28T10:52:04.359Z",
       "extra": {}
+    },
+    {
+      "id": "2",
+      "number": 15,
+      "kind": "story",
+      "title": "段(2) デモ操作",
+      "status": "backlog",
+      "parent": null,
+      "dependsOn": [],
+      "milestone": null,
+      "priority": "normal",
+      "labels": [],
+      "body": "差し込み口の scripts/actions/runs 経由で「ずらす」→構成図が赤くなる・出来事が流れる→「直す」→Sakuteiが直すのを/eventsで追う、というデモ操作をビューから行えるようにする。\n\nタイガマネージャー承認済みの条件:\n- 書き込みの口(操作を走らせる口)を有効にするのは、Basic 認証を設定したときだけ。設定していなければ操作の欄は出さず、読むだけのまま。\n- ビューが呼ぶのは差し込み口の actions だけ。Sakutei の承認や書き込みの口は呼ばない。\n- 同時に走らせる操作は1つまで(差し込み口自身の409で担保。0.2のreason/busy_byをUIに表示)。\n- 画面の流れ: 台本を選ぶ→「ずらす」→構成図の色が変わり出来事が流れる→「直す」→Sakuteiが直すのを/eventsで追い元に戻るまで見せる。実行の状態(runs)も見せる。\n- 見本の差し込み口(example-plugin)で手元で確かめる。本物の検証環境にはまだつながない。\n\n公開の決まり(使う側の名前を書かない・push前点検・fast-forwardのみ・作者/コミッターtjst-t)はこれまでどおり。",
+      "doneWhen": "example-pluginを使い、ブラウザから台本を選んで「ずらす」を押すと構成図のノードが赤くなり出来事ログに流れ、「直す」を押すとrunステータスが進み元の状態に戻るまで確認できる。Basic認証未設定時は操作の欄が表示されないことも確認する。",
+      "resolution": null,
+      "refs": [],
+      "threads": [],
+      "createdAt": "2026-10-28T12:04:11.206Z",
+      "updatedAt": "2026-10-28T12:04:11.206Z",
+      "closedAt": null,
+      "extra": {}
     }
   ]
 }
