@@ -426,7 +426,7 @@
       "number": 18,
       "kind": "story",
       "title": "段(3) 出来事の時系列を貯める・公開デモ構成",
-      "status": "in-progress",
+      "status": "done",
       "parent": null,
       "dependsOn": [],
       "milestone": null,
@@ -434,7 +434,7 @@
       "labels": [],
       "body": "タイガマネージャー指示によるStage 3。2部構成:\n- Part A: ビュー自身が出来事の時系列を貯める(リロード・再起動で履歴が消えない、重複なし、保持件数/期間を設定可能)\n- Part B: 公開用のデモ構成(小さなcontainerlabトポロジ・見本プラグイン・Sakutei設定)をexamples配下に同梱し、実物のSakutei最新リリースで動作確認する\n\nいずれも段(1)(2)と同じくBacklogで管理し、完了ごとにタイガマネージャーへ報告する。",
       "doneWhen": "",
-      "resolution": null,
+      "resolution": "Part A(events-timeline、出来事の時系列の永続化)・Part B(public-demo-config、公開デモ構成)とも実装・実機確認・push完了。段(3)完了。タイガマネージャーへ報告済み。",
       "refs": [],
       "threads": [
         {
@@ -443,8 +443,8 @@
         }
       ],
       "createdAt": "2026-10-28T12:55:56.157Z",
-      "updatedAt": "2026-10-28T12:55:56.157Z",
-      "closedAt": null,
+      "updatedAt": "2026-10-28T15:10:46.498Z",
+      "closedAt": "2026-10-28T15:10:46.498Z",
       "extra": {}
     },
     {
