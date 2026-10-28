@@ -24,6 +24,13 @@ backwards-incompatible ways before 1.0.
   `Authorization: Bearer <token>`. The token is configured on the
   sakutei-view side; a plugin may ignore it (for local examples/demos) or
   enforce it (recommended for anything reachable beyond localhost).
+- A plugin may be served over plain HTTP (for local examples/demos) or
+  HTTPS. For HTTPS, sakutei-view verifies the plugin's certificate; if the
+  plugin uses a private CA, that CA's certificate must be configured on
+  the sakutei-view side. sakutei-view has no option to skip certificate
+  verification, so a plugin reachable beyond localhost should use either a
+  publicly-trusted certificate or a CA the deployment is willing to
+  configure on the sakutei-view side.
 - Write-ish endpoints (`POST .../actions/...`) are the only ones that
   cause the plugin to do something; everything else is a read.
 - `kind` values for state/events are free-form strings chosen by the
