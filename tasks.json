@@ -548,13 +548,13 @@
       "labels": [],
       "body": "internal/webui/distはgo:embedでsakutei-viewバイナリに同梱されるフロントエンドのビルド成果物だが、段(2)でOperationsPanel(ずらす/直すのUI)を追加した変更(コミット67e37ec)より前のdist(コミットd961971時点)のままコミットされており、以降一度も再ビルド・再コミットされていなかった。そのため`go build ./cmd/sakutei-view`で生成される単一バイナリにはOperationsパネルが存在せず、Basic認証を設定していてもactions_enabled: trueなのに操作UIが出ない状態だった。containerlabごとの実機検証中に発見。scripts/build-frontend.shを再実行しinternal/webui/distを最新化してコミット(d9c0501)、ブラウザで単一バイナリ起動時にOperationsパネルが表示されDisturb/Fixが動作することを確認済み。",
       "doneWhen": "",
-      "resolution": null,
+      "resolution": "scripts/build-frontend.shを再実行し、internal/webui/distを現在のweb/src(OperationsPanel等を含む)から再生成してコミット。実機でgo build ./cmd/sakutei-viewのみで生成した単一バイナリを起動し、Operationsパネルの表示とDisturb/Fixの動作を確認済み。コミットd9c0501でpush済み。再発防止策(ビルドスクリプトへの検知追加等)は今回は行っていない。",
       "refs": [
         "d9c0501"
       ],
       "threads": [],
       "createdAt": "2026-10-29T01:06:42.432Z",
-      "updatedAt": "2026-10-29T01:06:42.432Z",
+      "updatedAt": "2026-10-29T01:06:50.711Z",
       "closedAt": "2026-10-29T01:06:42.432Z",
       "extra": {}
     }
