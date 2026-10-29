@@ -627,6 +627,29 @@
       "updatedAt": "2026-10-29T01:21:17.483Z",
       "closedAt": null,
       "extra": {}
+    },
+    {
+      "id": "a5-a6-sakutei-status-tier-health",
+      "number": 27,
+      "kind": "bug",
+      "title": "A5/A6: Sakutei /status tierの型不一致とhealth上書きの修正",
+      "status": "done",
+      "parent": null,
+      "dependsOn": [],
+      "milestone": null,
+      "priority": "normal",
+      "labels": [],
+      "body": "使う側の本物の検証環境での確かめで見つかった不具合2つ。タスクA(#25)に足す形でメタProjectから指示され、A全体で6項目になった。\n\nA5. Sakuteiの/status の tier が本物(v2.6.0)ではオブジェクト({\"true_observe\":bool,\"list\":bool,\"bulk_observe\":bool,\"pruneable\":bool,\"provider_version\":string})なのに、internal/source/sakutei/types.goではstringと宣言されていたため、drift中のリソースを含む/statusの応答が丸ごと読み込み失敗していた。Tierを専用structにしResourceStatus.Tierを*Tierに変更。\n加えて、internal/source/sakutei/client.goのdecodeJSONが、1つの欄の形が合わないだけで応答全体を捨てていた問題も直した。encoding/jsonは合わない欄だけスキップしほかは正しく読み込む(*json.UnmarshalTypeError)ので、その場合はエラーにせず読めた分を返すようにした。これによりtierに限らず今後のどんな欄の形の不一致にも一般的に強くなる。ほかの/status・/plan・/graphの欄の型もSakutei v2.6.0の本物のソースと突き合わせて確認し、tier以外の不一致は無いことを確認した。\n\nA6. internal/aggregate/aggregate.goで/status・/plan・/graphの3つの独立したポーリング関数が同じHealth[sakutei]に直接書き込んでいたため、Snapshot内で最後に実行したものが常に勝ち、/statusが失敗していても後続の/plan・/graphが成功すると health が ok で上書きされていた。各関数が自分のエラーを返す形に変え、新設のrecordSakuteiHealthで3つのうち1つでも失敗していればSakutei全体を失敗として記録するようにした(メタProjectが示した選択肢のうち「1つでも失敗したらその源を失敗として見せる」を採用)。\n\n試験: object形のtierを含むdrift中のリソースのfixtureで正しく読めること、知らない形のtier(旧string形)が来てもほかの欄はすべて読めること、/statusだけが失敗し/plan・/graphが成功してもHealth[sakutei]が失敗を示すこと、全部成功時はokを示すこと、の4点を自動テストに追加。\n\n実機の本物のSakutei出力のサンプル(使う側の伏せた写し)はまだ届いていないため、本物のv2.6.0のdocs/read-api.md・docs/status-json.mdとソースコードの記述に基づいた合成fixtureで検証した。",
+      "doneWhen": "go build/vet/test ./... 全通過、tierのobject形デコード・未知形への耐性・health上書きの3種のテストを追加、mainにpush済み",
+      "resolution": null,
+      "refs": [
+        "https://github.com/tjst-t/sakutei-view/commit/7ac9744"
+      ],
+      "threads": [],
+      "createdAt": "2026-10-29T01:51:31.615Z",
+      "updatedAt": "2026-10-29T01:51:31.615Z",
+      "closedAt": "2026-10-29T01:51:31.615Z",
+      "extra": {}
     }
   ]
 }
