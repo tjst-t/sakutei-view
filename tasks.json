@@ -490,6 +490,29 @@
       "extra": {}
     },
     {
+      "id": "containerlab-2",
+      "number": 22,
+      "kind": "task",
+      "title": "公開デモ構成をcontainerlabごと通して確かめる",
+      "status": "done",
+      "parent": "3",
+      "dependsOn": [],
+      "milestone": null,
+      "priority": "normal",
+      "labels": [],
+      "body": "examples/demo/topology.clab.ymlの実機確認。containerlab deployで3ノード起動、server01のqemu-bmcがhealthyになることを確認。redfish-system//server01に対し、実際のSakutei v2.6.0バイナリでplan(power Off→On検出)→reconcile(適用)→再plan(Converged)を実行し、BMCのRedfish APIに直接クエリしてPowerState: On / BootSourceOverrideEnabled: Disabledを確認。さらにexamples/demo/run-demo.sh(新規追加、REDFISH_CONFIG指定時)経由で実Sakutei+実example-plugin+実sakutei-viewを一括起動し、ブラウザでOperationsパネルからDisturb→Live eventsにDisturbed→Fix→Fixedが流れることを実機確認。containerlab destroyでラボを破棄済み。",
+      "doneWhen": "topology.clab.ymlがcontainerlab deployで実際に起動し、redfish-systemがqemu-bmcに対して収束し、sakutei-view上でdisturb/fixの往復がLive eventsで確認できること。",
+      "resolution": null,
+      "refs": [
+        "d9c0501"
+      ],
+      "threads": [],
+      "createdAt": "2026-10-29T01:06:38.902Z",
+      "updatedAt": "2026-10-29T01:06:38.902Z",
+      "closedAt": "2026-10-29T01:06:38.902Z",
+      "extra": {}
+    },
+    {
       "id": "sakutei-graph-waves-sakutei-id-ready-fal",
       "number": 21,
       "kind": "bug",
