@@ -33,7 +33,12 @@ over Server-Sent Events:
 1. **Containerlab** — topology and node state, either from a
    [`clab-api-server`](https://containerlab.dev/manual/gui/) instance, or
    from a plugin's `GET /plugin/topology` (see below). The data source is
-   pluggable.
+   pluggable. Note: the `clab-api-server` (`CONTAINERLAB_SOURCE=clab-api`)
+   path has so far only been exercised in this project's own development
+   against a mock matching `clab-api-server`'s published swagger, not
+   against a real `clab-api-server` instance; `CONTAINERLAB_SOURCE=plugin`
+   is the path that has been verified end-to-end against a real
+   containerlab lab.
 2. **Sakutei's read-only API** — started with `sakutei --read-listen`,
    exposing `/status`, `/plan`, `/graph` and `/events` (SSE). See the
    [Sakutei repository](https://github.com/tjst-t/sakutei) for the exact

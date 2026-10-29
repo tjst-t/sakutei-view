@@ -59,6 +59,39 @@ func TestClient_InfoStatusScripts(t *testing.T) {
 	}
 }
 
+func TestStatusResponse_SakuteiBindingsV03AndV02Compat(t *testing.T) {
+	// v0.3: sakutei_bindings present.
+	var withBindings StatusResponse
+	if err := json.Unmarshal([]byte(`{
+		"generated_at": "2026-10-28T06:00:00Z",
+		"resources": [],
+		"sakutei_bindings": [{"resource_id": "res-1", "node": "fw1"}, {"resource_id": "res-2", "node": "dns1"}]
+	}`), &withBindings); err != nil {
+		t.Fatalf("Unmarshal (v0.3 with bindings): %v", err)
+	}
+	if len(withBindings.SakuteiBindings) != 2 ||
+		withBindings.SakuteiBindings[0] != (SakuteiBinding{ResourceID: "res-1", Node: "fw1"}) ||
+		withBindings.SakuteiBindings[1] != (SakuteiBinding{ResourceID: "res-2", Node: "dns1"}) {
+		t.Fatalf("unexpected decode: %+v", withBindings.SakuteiBindings)
+	}
+
+	// v0.1/v0.2: no sakutei_bindings field at all. Must decode to a nil
+	// (not empty-non-nil) slice, same as a pre-v0.3 response always did.
+	var v02 StatusResponse
+	if err := json.Unmarshal([]byte(`{
+		"generated_at": "2026-10-28T06:00:00Z",
+		"resources": [{"id": "demo-01", "kind": "storage", "label": "Demo", "state": "ok", "node": "node01"}]
+	}`), &v02); err != nil {
+		t.Fatalf("Unmarshal (v0.2, no sakutei_bindings): %v", err)
+	}
+	if v02.SakuteiBindings != nil {
+		t.Fatalf("SakuteiBindings = %+v, want nil when the field is absent", v02.SakuteiBindings)
+	}
+	if len(v02.Resources) != 1 || v02.Resources[0].ID != "demo-01" {
+		t.Fatalf("unexpected Resources decode: %+v", v02.Resources)
+	}
+}
+
 func TestClient_RunAction_AcceptedAndConflict(t *testing.T) {
 	var runInProgress bool
 	mux := http.NewServeMux()

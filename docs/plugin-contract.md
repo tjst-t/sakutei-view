@@ -1,4 +1,4 @@
-# Device plugin contract — v0.2
+# Device plugin contract — v0.3
 
 sakutei-view reads two kinds of data it does not generate itself:
 containerlab's state and Sakutei's state. A third, optional kind — a
@@ -12,13 +12,14 @@ It is versioned independently of sakutei-view itself; a plugin declares
 the contract version it implements, and sakutei-view will refuse to use a
 plugin whose major version it does not understand.
 
-This document describes **0.2**. It is still pre-1.0 and may change in
-backwards-incompatible ways before 1.0, but 0.1 and 0.2 are compatible
-with each other in practice: every field 0.2 adds is optional and a
-sakutei-view that understands 0.2 also understands a 0.1 plugin's
-responses (the new fields simply come back empty). A 0.1 plugin needs no
-changes to keep working; see "Changes in v0.2" below if you are writing or
-updating a plugin.
+This document describes **0.3**. It is still pre-1.0 and may change in
+backwards-incompatible ways before 1.0, but 0.1, 0.2 and 0.3 are all
+compatible with each other in practice: every field a later version adds
+is optional, and a sakutei-view that understands 0.3 also understands a
+0.1 or 0.2 plugin's responses (the newer fields simply come back empty).
+A 0.1 or 0.2 plugin needs no changes to keep working; see "Changes in
+v0.3" and "Changes in v0.2" below if you are writing or updating a
+plugin.
 
 ## Conventions
 
@@ -46,6 +47,48 @@ updating a plugin.
   `firing` (something started/is true now) and `resolved` (it stopped/is
   no longer true). This lets sakutei-view merge plugin events and Sakutei
   events into one timeline without special-casing either source.
+
+## Changes in v0.3
+
+- **`GET /plugin/status`'s `resources[].node` field is clarified**: it
+  must be the *topology* node name — the same identifier a `.clab.yml`
+  uses as a node's key, and that containerlab's own `inspect` output
+  turns into a container named `clab-<lab-name>-<node>`. It is not that
+  container name. This was always the intended meaning; this is a wording
+  clarification, not a behavior change, so it does not require any plugin
+  to change anything.
+- **`GET /plugin/status` gained an optional `sakutei_bindings` field**,
+  letting a plugin explicitly map a Sakutei resource id to the topology
+  node it belongs to:
+
+  ```json
+  {
+    "generated_at": "2026-10-28T06:00:00Z",
+    "resources": [],
+    "sakutei_bindings": [
+      { "resource_id": "res-nftables-fw1-forward", "node": "fw1" }
+    ]
+  }
+  ```
+
+  sakutei-view's default rule for matching a Sakutei resource to a
+  containerlab node is generic: it takes the first `/`-delimited segment
+  of the resource's `local_id` (Sakutei's own per-resource identifier,
+  distinct from its globally-unique `id`) and treats that as the node
+  name — e.g. a `local_id` of `fw1/inet/filter/forward` matches node
+  `fw1`. This works for resource kinds whose `local_id` happens to be
+  scoped under the node it belongs to, but not every provider's
+  `local_id` is shaped that way (and some resources, like a DNS zone or a
+  cloud account, do not belong to any containerlab node at all — those
+  are correctly left unmatched rather than guessed at).
+
+  `sakutei_bindings` lets a plugin override or supplement that guess for
+  any specific resource id, by its Sakutei `id` (not `local_id`). An
+  entry here always wins over the generic rule for that resource id. The
+  field is entirely optional; a plugin that doesn't need it can omit it,
+  and sakutei-view then falls back to the generic rule for every
+  resource, exactly as a v0.1/v0.2 plugin's responses are already
+  understood.
 
 ## Changes in v0.2
 
@@ -79,14 +122,14 @@ a configured plugin.
 
 ```json
 {
-  "version": "0.2",
+  "version": "0.3",
   "name": "example-plugin",
   "capabilities": ["topology", "status", "scripts", "events"]
 }
 ```
 
-- `version`: the contract version this plugin implements (e.g. `"0.1"` or
-  `"0.2"`).
+- `version`: the contract version this plugin implements (e.g. `"0.1"`,
+  `"0.2"` or `"0.3"`).
 - `capabilities`: which of the optional endpoint groups below are
   implemented. `status` and `events` are expected from essentially every
   plugin; `topology` and `scripts` are optional (a plugin that only adds
@@ -131,20 +174,26 @@ Sakutei's `/status` for things Sakutei does not itself model.
       "fields": { "lun_count": 4, "capacity_gb": 500 },
       "drifted_fields": []
     }
-  ]
+  ],
+  "sakutei_bindings": []
 }
 ```
 
 - `resources[].id`: stable identifier, unique within this plugin.
 - `resources[].state`: one of `ok`, `drifted`, `unknown`, `error`.
-- `resources[].node`: the containerlab node name this resource belongs
-  to, so sakutei-view can draw its state on the matching topology node.
-  Empty string if there is no corresponding containerlab node.
+- `resources[].node`: the *topology* node name this resource belongs to
+  (a `.clab.yml` node key — never containerlab's `clab-<lab-name>-<node>`
+  container name), so sakutei-view can draw its state on the matching
+  topology node. Empty string if there is no corresponding containerlab
+  node.
 - `resources[].fields`: free-form key/value pairs, shown as-is in the
   resource's detail panel.
 - `resources[].drifted_fields`: subset of the keys in `fields` that are
   currently drifted (differ from what is desired), if `state` is
   `"drifted"`. Empty otherwise.
+- `sakutei_bindings` (optional, added in v0.3): explicit Sakutei
+  resource-id-to-node overrides — see "Changes in v0.3" above. Omit
+  entirely (or send an empty array) if not needed.
 
 ## `GET /plugin/scripts` (optional — `capabilities: ["scripts"]`)
 

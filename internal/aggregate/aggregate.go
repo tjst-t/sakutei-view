@@ -6,11 +6,28 @@
 // node's overall color (ok/drift/apply_failed/...).
 //
 // Sakutei is a generic, provider-agnostic reconciler: it has no built-in
-// notion of "this resource is that containerlab node". sakutei-view assumes
-// the simplest possible convention to bridge the two: a Sakutei resource
-// overlays a containerlab node when the resource's local_id equals the
-// node's name. The device plugin contract has no such ambiguity — its
-// /plugin/status resources already carry an explicit node field.
+// notion of "this resource is that containerlab node". sakutei-view bridges
+// the two with a generic convention plus an explicit override:
+//
+//   - Generic: a Sakutei resource overlays the containerlab node named by
+//     the first "/"-delimited segment of its local_id (e.g. local_id
+//     "fw1/inet/filter/forward" overlays node "fw1"), or by the whole
+//     local_id when it has no "/" at all. See sakuteiNodeNameFromLocalID.
+//   - Explicit: a device plugin may optionally report a resource-id-to-node
+//     mapping via GET /plugin/status's sakutei_bindings field (contract
+//     v0.3). When present for a given resource id, it wins over the
+//     generic rule — this is how a resource whose local_id doesn't follow
+//     the node-prefix convention (or needs to bind to a different node
+//     than a literal prefix match would find) still gets placed correctly.
+//     See explicitSakuteiBindings.
+//
+// A resource matching no node by either rule (e.g. an id scoped to
+// something that isn't a containerlab node at all, like an external
+// account or a DNS zone) is simply not shown on the topology diagram — see
+// the Sakutei summary/dependency views for those instead.
+//
+// The device plugin contract has no such ambiguity for its own resources —
+// /plugin/status's entries already carry an explicit node field.
 //
 // # Resilience
 //
@@ -28,6 +45,7 @@ package aggregate
 import (
 	"context"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -533,6 +551,37 @@ func buildGraph(g sakutei.GraphResponse) *SakuteiGraph {
 	return &SakuteiGraph{Waves: waves}
 }
 
+// sakuteiNodeNameFromLocalID extracts the node-name candidate from a
+// Sakutei resource's local_id, per the generic convention described in the
+// package doc: everything up to (not including) the first "/" when the
+// local_id contains one (e.g. "fw1/inet/filter/forward" -> "fw1"), or the
+// whole local_id when it doesn't. It does not check whether the result is
+// an actual node name -- callers decide that by looking it up in the
+// Snapshot's own node list (byName), same as any explicit binding.
+func sakuteiNodeNameFromLocalID(localID string) string {
+	if node, _, found := strings.Cut(localID, "/"); found {
+		return node
+	}
+	return localID
+}
+
+// explicitSakuteiBindings builds a Sakutei-resource-id -> node-name lookup
+// out of a device plugin's optional StatusResponse.SakuteiBindings
+// (contract v0.3). Returns nil (not an empty map) when status is nil or has
+// no bindings at all -- a v0.1/v0.2 plugin, or a v0.3 plugin that simply
+// doesn't need any -- so callers can treat a nil result the same as "fall
+// back to the generic rule for everything" without allocating.
+func explicitSakuteiBindings(status *plugin.StatusResponse) map[string]string {
+	if status == nil || len(status.SakuteiBindings) == 0 {
+		return nil
+	}
+	out := make(map[string]string, len(status.SakuteiBindings))
+	for _, b := range status.SakuteiBindings {
+		out[b.ResourceID] = b.Node
+	}
+	return out
+}
+
 // fetchPluginStatus polls the plugin's /plugin/status with a bounded
 // deadline. Returns nil if the plugin is not configured or is unreachable
 // with no prior successful read to fall back to.
@@ -609,11 +658,17 @@ func (a *Aggregator) Snapshot(ctx context.Context) (Snapshot, error) {
 		snap.SakuteiGraph = buildGraph(*sakuteiGraph)
 	}
 
+	bindings := explicitSakuteiBindings(pluginStatus)
+
 	if sakuteiStatus != nil {
 		summary := sakuteiStatus.Summary
 		snap.SakuteiSummary = &summary
 		for _, r := range sakuteiStatus.Resources {
-			idx, ok := byName[r.LocalID]
+			nodeName, explicit := bindings[r.ID]
+			if !explicit {
+				nodeName = sakuteiNodeNameFromLocalID(r.LocalID)
+			}
+			idx, ok := byName[nodeName]
 			if !ok {
 				continue
 			}

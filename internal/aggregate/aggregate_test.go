@@ -380,6 +380,140 @@ func TestAggregator_Snapshot_HealthDistinguishesUnconfiguredFromUnreachable(t *t
 	}
 }
 
+// newAggregatorForBindingTest builds an Aggregator with a containerlab
+// source fixed to the given nodes, a Sakutei /status handler answering with
+// sakuteiResourcesJSON (wrapped in a minimal otherwise-empty envelope), and
+// -- if pluginStatusJSON is non-empty -- a plugin /plugin/status handler
+// answering with that raw JSON body verbatim (so callers can exercise both
+// "sakutei_bindings present" and "field absent entirely", the latter
+// standing in for a pre-v0.3 plugin).
+func newAggregatorForBindingTest(t *testing.T, nodeNames []string, sakuteiResourcesJSON string, pluginStatusJSON string) *Aggregator {
+	t.Helper()
+
+	sakuteiSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{
+			"schema_version": 1,
+			"generated_at": "2026-10-28T00:00:00Z",
+			"complete": true,
+			"cycle": 1,
+			"cycle_time": "2026-10-28T00:00:00Z",
+			"last_cycle": 1,
+			"summary": {"conformant": 0, "drift": 0, "missing": 0, "unobservable": 0,
+				"unmanaged": 0, "workflow": 0, "oscillating": 0, "list_errors": 0, "total": 0},
+			"resources": [` + sakuteiResourcesJSON + `]
+		}`))
+	}))
+	t.Cleanup(sakuteiSrv.Close)
+
+	var pluginClient *plugin.Client
+	if pluginStatusJSON != "" {
+		pluginSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(pluginStatusJSON))
+		}))
+		t.Cleanup(pluginSrv.Close)
+		pluginClient = plugin.NewClient(pluginSrv.URL, nil)
+	}
+
+	nodes := make([]containerlab.Node, len(nodeNames))
+	for i, n := range nodeNames {
+		nodes[i] = containerlab.Node{Name: n, State: "running"}
+	}
+	cl := mockContainerlabSource{topo: containerlab.Topology{Nodes: nodes}}
+
+	return New(cl, sakutei.NewClient(sakuteiSrv.URL, nil), pluginClient)
+}
+
+// TestAggregator_Snapshot_SakuteiBindingByLocalIDPrefix verifies the
+// generic matching rule: a resource whose local_id is scoped under a node
+// (e.g. a firewall rule nested under "<node>/<family>/<table>/<chain>",
+// matching Sakutei's real-world local_id shape for such resources) overlays
+// that node even though local_id is not itself equal to the node's name.
+func TestAggregator_Snapshot_SakuteiBindingByLocalIDPrefix(t *testing.T) {
+	agg := newAggregatorForBindingTest(t, []string{"fw1"},
+		`{"id": "res-1", "provider": "nftables", "scope": {}, "local_id": "fw1/inet/filter/forward", "state": "drift"}`,
+		"")
+
+	snap, err := agg.Snapshot(context.Background())
+	if err != nil {
+		t.Fatalf("Snapshot: %v", err)
+	}
+	if len(snap.Nodes) != 1 || snap.Nodes[0].Sakutei == nil {
+		t.Fatalf("Nodes = %+v, want one node with a Sakutei overlay", snap.Nodes)
+	}
+	if got := snap.Nodes[0].Sakutei; got.ResourceID != "res-1" || got.State != "drift" {
+		t.Errorf("fw1.Sakutei = %+v, want ResourceID=res-1 State=drift", got)
+	}
+}
+
+// TestAggregator_Snapshot_SakuteiExplicitBindingForNonPrefixedLocalID
+// verifies that a plugin's optional sakutei_bindings (contract v0.3) can
+// bind a resource the generic prefix rule cannot place at all -- e.g. a
+// local_id with no node-name segment whatsoever (a DNS zone, an account,
+// ...).
+func TestAggregator_Snapshot_SakuteiExplicitBindingForNonPrefixedLocalID(t *testing.T) {
+	agg := newAggregatorForBindingTest(t, []string{"dns1"},
+		`{"id": "res-1", "provider": "dns", "scope": {}, "local_id": "example.test./A", "state": "conformant"}`,
+		`{"generated_at": "2026-10-28T00:00:00Z", "resources": [],
+		  "sakutei_bindings": [{"resource_id": "res-1", "node": "dns1"}]}`)
+
+	snap, err := agg.Snapshot(context.Background())
+	if err != nil {
+		t.Fatalf("Snapshot: %v", err)
+	}
+	if len(snap.Nodes) != 1 || snap.Nodes[0].Sakutei == nil {
+		t.Fatalf("Nodes = %+v, want dns1 to have a Sakutei overlay via the explicit binding", snap.Nodes)
+	}
+	if got := snap.Nodes[0].Sakutei.ResourceID; got != "res-1" {
+		t.Errorf("dns1.Sakutei.ResourceID = %q, want res-1", got)
+	}
+}
+
+// TestAggregator_Snapshot_SakuteiExplicitBindingOverridesGeneric verifies
+// that when a plugin's sakutei_bindings names a different node than the
+// generic local_id-prefix rule would, the explicit binding wins.
+func TestAggregator_Snapshot_SakuteiExplicitBindingOverridesGeneric(t *testing.T) {
+	agg := newAggregatorForBindingTest(t, []string{"fw1", "dns1"},
+		`{"id": "res-1", "provider": "nftables", "scope": {}, "local_id": "fw1/inet/filter/forward", "state": "drift"}`,
+		`{"generated_at": "2026-10-28T00:00:00Z", "resources": [],
+		  "sakutei_bindings": [{"resource_id": "res-1", "node": "dns1"}]}`)
+
+	snap, err := agg.Snapshot(context.Background())
+	if err != nil {
+		t.Fatalf("Snapshot: %v", err)
+	}
+	byName := map[string]Node{}
+	for _, n := range snap.Nodes {
+		byName[n.Name] = n
+	}
+	if byName["fw1"].Sakutei != nil {
+		t.Errorf("fw1.Sakutei = %+v, want nil (explicit binding should have moved it to dns1)", byName["fw1"].Sakutei)
+	}
+	if byName["dns1"].Sakutei == nil || byName["dns1"].Sakutei.ResourceID != "res-1" {
+		t.Errorf("dns1.Sakutei = %+v, want ResourceID=res-1", byName["dns1"].Sakutei)
+	}
+}
+
+// TestAggregator_Snapshot_SakuteiBindingPluginWithoutBindingsField verifies
+// backward compatibility with a v0.1/v0.2 plugin, whose /plugin/status
+// response has no sakutei_bindings field at all: the generic local_id-prefix
+// rule must still apply to every resource, exactly as if no plugin were
+// configured.
+func TestAggregator_Snapshot_SakuteiBindingPluginWithoutBindingsField(t *testing.T) {
+	agg := newAggregatorForBindingTest(t, []string{"fw1"},
+		`{"id": "res-1", "provider": "nftables", "scope": {}, "local_id": "fw1/inet/filter/forward", "state": "drift"}`,
+		`{"generated_at": "2026-10-28T00:00:00Z", "resources": []}`)
+
+	snap, err := agg.Snapshot(context.Background())
+	if err != nil {
+		t.Fatalf("Snapshot: %v", err)
+	}
+	if len(snap.Nodes) != 1 || snap.Nodes[0].Sakutei == nil || snap.Nodes[0].Sakutei.ResourceID != "res-1" {
+		t.Fatalf("Nodes = %+v, want fw1 bound via the generic rule despite the plugin being configured", snap.Nodes)
+	}
+}
+
 func TestAggregator_Snapshot_SakuteiNotYet(t *testing.T) {
 	sakuteiSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")

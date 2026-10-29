@@ -11,7 +11,10 @@ import (
 )
 
 // Client calls one device plugin's HTTP endpoints, per
-// docs/plugin-contract.md (v0.1).
+// docs/plugin-contract.md (currently v0.3; this client also understands
+// v0.1/v0.2 responses, since every field a later version added is
+// optional -- see that document's "Changes in v0.2"/"Changes in v0.3"
+// sections).
 type Client struct {
 	// BaseURL is the plugin's address, e.g. "http://127.0.0.1:8081" or
 	// "https://plugin.example:8443". No trailing slash.

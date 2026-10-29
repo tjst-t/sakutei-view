@@ -1,6 +1,6 @@
 // Command example-plugin is a minimal, dependency-free reference
 // implementation of the sakutei-view device plugin contract (see
-// docs/plugin-contract.md, version 0.2). It serves static/fake data and a
+// docs/plugin-contract.md, version 0.3). It serves static/fake data and a
 // toy "disturb"/"fix" demo script, useful for exercising sakutei-view
 // without any real device behind it.
 //
@@ -25,7 +25,7 @@ import (
 	"time"
 )
 
-const contractVersion = "0.2"
+const contractVersion = "0.3"
 
 // --- state -----------------------------------------------------------------
 

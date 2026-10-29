@@ -38,19 +38,46 @@ type Topology struct {
 
 // Resource is one element of StatusResponse.Resources.
 type Resource struct {
-	ID            string         `json:"id"`
-	Kind          string         `json:"kind"`
-	Label         string         `json:"label"`
-	State         string         `json:"state"` // ok | drifted | unknown | error
+	ID    string `json:"id"`
+	Kind  string `json:"kind"`
+	Label string `json:"label"`
+	State string `json:"state"` // ok | drifted | unknown | error
+	// Node is the topology node name (a .clab.yml node key, the same
+	// identifier containerlab.Node.Name uses -- never the underlying Docker
+	// container name, see containerlab.Node's doc comment) that this
+	// resource belongs to, if any. Clarified in contract v0.3 to spell out
+	// "topology node name" explicitly; this is not a behavior change, just a
+	// wording fix (plugins were always expected to send the topology name
+	// here).
 	Node          string         `json:"node"`
 	Fields        map[string]any `json:"fields"`
 	DriftedFields []string       `json:"drifted_fields"`
+}
+
+// SakuteiBinding explicitly maps a Sakutei resource id to the topology node
+// it belongs to, for resources whose Sakutei local_id does not start with
+// the node's name followed by "/" (the generic rule aggregate.Aggregator
+// otherwise applies) -- e.g. a local_id with a provider-specific shape
+// that merely happens to not be node-prefixed, or one that needs to bind
+// to a different node than a literal prefix match would find. Added in
+// contract v0.3; entirely optional, and takes priority over the generic
+// prefix rule when both would apply to the same resource.
+type SakuteiBinding struct {
+	ResourceID string `json:"resource_id"`
+	Node       string `json:"node"`
 }
 
 // StatusResponse is the response of GET /plugin/status.
 type StatusResponse struct {
 	GeneratedAt time.Time  `json:"generated_at"`
 	Resources   []Resource `json:"resources"`
+	// SakuteiBindings optionally maps specific Sakutei resource ids to
+	// topology node names, for cases the generic local_id-prefix rule
+	// (aggregate.Aggregator) gets wrong or can't apply to. Added in contract
+	// v0.3; omitted entirely by v0.1/v0.2 plugins, which is indistinguishable
+	// from an empty list -- callers fall back to the generic rule for every
+	// resource in that case, same as before this field existed.
+	SakuteiBindings []SakuteiBinding `json:"sakutei_bindings,omitempty"`
 }
 
 // Script is one element of ScriptsResponse.Scripts.

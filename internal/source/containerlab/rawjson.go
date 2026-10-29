@@ -1,6 +1,9 @@
 package containerlab
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"strings"
+)
 
 // rawContainerInfo mirrors the JSON fields shared by containerlab's own
 // `inspect --format json` output (see containerlab.dev/cmd/inspect/) and
@@ -14,6 +17,12 @@ type rawContainerInfo struct {
 	LabPath     string `json:"labPath"`
 	AbsLabPath  string `json:"absLabPath"`
 	Name        string `json:"name"`
+	// NodeName is clab-api-server's own short (topology-level) node name.
+	// containerlab's own `inspect --format json` output has no such field --
+	// only Name (the full "clab-<lab>-<node>" container name) -- so toNode()
+	// falls back to deriving it from Name+LabName via shortNodeName when this
+	// is empty.
+	NodeName    string `json:"nodeName"`
 	ContainerID string `json:"container_id"`
 	Image       string `json:"image"`
 	Kind        string `json:"kind"`
@@ -26,18 +35,39 @@ type rawContainerInfo struct {
 }
 
 func (c rawContainerInfo) toNode() Node {
-	return Node{
-		LabName: c.LabName,
-		Name:    c.Name,
-		Kind:    c.Kind,
-		Image:   c.Image,
-		State:   c.State,
-		Status:  c.Status,
-		IPv4:    c.IPv4Address,
-		IPv6:    c.IPv6Address,
-		Owner:   c.Owner,
-		Group:   c.Group,
+	name := c.NodeName
+	if name == "" {
+		name = shortNodeName(c.Name, c.LabName)
 	}
+	return Node{
+		LabName:       c.LabName,
+		Name:          name,
+		ContainerName: c.Name,
+		Kind:          c.Kind,
+		Image:         c.Image,
+		State:         c.State,
+		Status:        c.Status,
+		IPv4:          c.IPv4Address,
+		IPv6:          c.IPv6Address,
+		Owner:         c.Owner,
+		Group:         c.Group,
+	}
+}
+
+// shortNodeName strips containerlab's own "clab-<labName>-" container-name
+// prefix off containerName, returning just the topology node name. If
+// labName is empty, or containerName does not actually have that prefix
+// (unexpected shape; a source this code doesn't recognize), containerName
+// is returned unchanged rather than guessing.
+func shortNodeName(containerName, labName string) string {
+	if labName == "" {
+		return containerName
+	}
+	prefix := "clab-" + labName + "-"
+	if short, ok := strings.CutPrefix(containerName, prefix); ok {
+		return short
+	}
+	return containerName
 }
 
 // rawLinkEndpoint mirrors clab-api-server's models.LinkEndpoint.
@@ -68,14 +98,23 @@ func (l rawLink) toLink() Link {
 // objects. This is also exactly the shape of the "inspect" field in a
 // device plugin's GET /plugin/topology response, and of clab-api-server's
 // GET /api/v1/labs (models.ClabInspectOutput).
+//
+// containerlab's own inspect output always has each container's own
+// "lab_name" field populated, but as a defensive fallback (some
+// containerlab versions or hand-edited fixtures might omit it), a
+// container missing it inherits the outer map's key as its lab name --
+// that key *is* the lab name by construction of this shape.
 func decodeInspectJSON(data []byte) ([]Node, error) {
 	var byLab map[string][]rawContainerInfo
 	if err := json.Unmarshal(data, &byLab); err != nil {
 		return nil, err
 	}
 	var nodes []Node
-	for _, containers := range byLab {
+	for labKey, containers := range byLab {
 		for _, c := range containers {
+			if c.LabName == "" {
+				c.LabName = labKey
+			}
 			nodes = append(nodes, c.toNode())
 		}
 	}

@@ -8,6 +8,16 @@
 // to git. Anyone changing web/src must re-run that script and commit the
 // refreshed dist/ alongside their change; `go build ./cmd/sakutei-view`
 // itself never invokes npm and does not need Node.js installed.
+//
+// Because dist/ is committed separately from the web/ source it was built
+// from, it can silently go stale (someone edits web/src but forgets to
+// re-run the build script and commit the refreshed dist/). source-hash.txt
+// plus TestSourceHashMatchesCommittedDist (sourcehash_test.go) guard
+// against that: build-frontend.sh writes a hash of the current web/ source
+// to source-hash.txt every time it rebuilds dist/, and the test recomputes
+// that same hash from the checked-out web/ source under plain `go test`
+// (no Node.js needed) and fails if it no longer matches -- i.e. if web/ has
+// changed since dist/ was last built.
 package webui
 
 import (

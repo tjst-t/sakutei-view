@@ -104,12 +104,12 @@ func TestClabAPIClient_Topology(t *testing.T) {
 		t.Fatalf("Nodes = %d, want 2", len(topo.Nodes))
 	}
 	n0 := topo.Nodes[0]
-	if n0.Name != "clab-mylab-leaf1" || n0.Kind != "nokia_srlinux" || n0.State != "running" ||
+	if n0.Name != "leaf1" || n0.ContainerName != "clab-mylab-leaf1" || n0.Kind != "nokia_srlinux" || n0.State != "running" ||
 		n0.IPv4 != "172.20.20.2/24" || n0.Owner != "user" || n0.Group != "leaf" || n0.LabName != "mylab" {
 		t.Errorf("Nodes[0] = %+v, unexpected", n0)
 	}
 	n1 := topo.Nodes[1]
-	if n1.Name != "clab-mylab-spine1" || n1.State != "exited" || n1.Group != "spine" {
+	if n1.Name != "spine1" || n1.ContainerName != "clab-mylab-spine1" || n1.State != "exited" || n1.Group != "spine" {
 		t.Errorf("Nodes[1] = %+v, unexpected", n1)
 	}
 
