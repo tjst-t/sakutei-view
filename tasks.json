@@ -584,7 +584,7 @@
       "number": 25,
       "kind": "task",
       "title": "A: ノード名・Sakutei結びつけ・リンク描画の不具合修正+embed古さ防止",
-      "status": "in-progress",
+      "status": "done",
       "parent": "b",
       "dependsOn": [],
       "milestone": null,
@@ -592,7 +592,7 @@
       "labels": [],
       "body": "1) containerlab.Nodeの名前解決をトポロジのノード名(prefix無し短い名前)に正す。clab-api-serverはnodeNameフィールドをそのまま使う。plugin/inspect経由はlab_name(無ければinspectの外側キー、それも無ければclab_yamlのname)でclab-<lab>-プレフィックスを剥がす。元のコンテナ名はContainerNameとして保持。\n2) aggregate.goのSakutei結びつけをlocal_idの最初の/区切りで汎用結合し、差し込み口のplugin/status.sakutei_bindings(resource_id→node、contract v0.3の任意欄)があれば優先する。\n3) pluginsource.goでGET /plugin/topologyのclab_yamlを解析し、topology.linksのendpoints(\"node:iface\")からLinksを作る(yaml.v3を依存に追加)。\n4) internal/webui/distがweb/srcの変更を反映し忘れたまま古くなる再発を防ぐ仕組み(ソースハッシュ照合テスト)を追加。\n5) docs/plugin-contract.mdをv0.3に改訂(sakutei_bindings追加、nodeがトポロジのノード名である旨を明記)。READMEに「clab-apiの経路はこの環境では模擬でだけ確かめた」旨を一言追記。\n6) 試験に少なくとも: prefix付きinspect名↔短いnode名の結合、LocalID先頭によるSakutei結合、明示対応が汎用より優先、clab_yamlのlinksから線ができること、の4点を入れる。\n7) go build/vet/test, npm run build/lint通過を確認しpush。",
       "doneWhen": "go test ./... と npm run build/lint が通過し、上記4点を含む自動テストがあり、mainにpush済み",
-      "resolution": null,
+      "resolution": "実装・テスト・実機ビルド検証・push完了(コミット833c76d、d9c0501..833c76dでfast-forward)。ノード名/コンテナ名の分離、clab_yamlからのリンク描画、Sakutei結びつけ(汎用local_idプレフィックス一致+明示sakutei_bindingsによる上書き、契約v0.3)、embed古さ防止(internal/webui/source-hash.txtとGoテストでの検知)、READMEへのclab-api-serverモック限定検証の注記、すべて実装・テスト済み。fixtureタスクA4(本物JSON、taiga-infraから)は未着手(未受領)。",
       "refs": [],
       "threads": [
         {
@@ -601,8 +601,8 @@
         }
       ],
       "createdAt": "2026-10-29T01:21:17.483Z",
-      "updatedAt": "2026-10-29T01:21:26.143Z",
-      "closedAt": null,
+      "updatedAt": "2026-10-29T01:39:02.006Z",
+      "closedAt": "2026-10-29T01:39:02.006Z",
       "extra": {}
     },
     {
