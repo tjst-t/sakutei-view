@@ -20,5 +20,9 @@ examples/demo/.run/
 examples/demo/.*.clab.yml.bak
 examples/demo/clab-*/
 
+# Design review mockups (may contain realistic-at-scale but invented
+# names for human review; never part of the public repo or a release)
+/.mockups/
+
 # OS
 .DS_Store
