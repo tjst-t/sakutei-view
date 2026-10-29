@@ -578,6 +578,50 @@
       "updatedAt": "2026-10-29T01:20:44.184Z",
       "closedAt": null,
       "extra": {}
+    },
+    {
+      "id": "regression-fix-a",
+      "number": 25,
+      "kind": "task",
+      "title": "A: ノード名・Sakutei結びつけ・リンク描画の不具合修正+embed古さ防止",
+      "status": "ready",
+      "parent": "b",
+      "dependsOn": [],
+      "milestone": null,
+      "priority": "normal",
+      "labels": [],
+      "body": "1) containerlab.Nodeの名前解決をトポロジのノード名(prefix無し短い名前)に正す。clab-api-serverはnodeNameフィールドをそのまま使う。plugin/inspect経由はlab_name(無ければinspectの外側キー、それも無ければclab_yamlのname)でclab-<lab>-プレフィックスを剥がす。元のコンテナ名はContainerNameとして保持。\n2) aggregate.goのSakutei結びつけをlocal_idの最初の/区切りで汎用結合し、差し込み口のplugin/status.sakutei_bindings(resource_id→node、contract v0.3の任意欄)があれば優先する。\n3) pluginsource.goでGET /plugin/topologyのclab_yamlを解析し、topology.linksのendpoints(\"node:iface\")からLinksを作る(yaml.v3を依存に追加)。\n4) internal/webui/distがweb/srcの変更を反映し忘れたまま古くなる再発を防ぐ仕組み(ソースハッシュ照合テスト)を追加。\n5) docs/plugin-contract.mdをv0.3に改訂(sakutei_bindings追加、nodeがトポロジのノード名である旨を明記)。READMEに「clab-apiの経路はこの環境では模擬でだけ確かめた」旨を一言追記。\n6) 試験に少なくとも: prefix付きinspect名↔短いnode名の結合、LocalID先頭によるSakutei結合、明示対応が汎用より優先、clab_yamlのlinksから線ができること、の4点を入れる。\n7) go build/vet/test, npm run build/lint通過を確認しpush。",
+      "doneWhen": "go test ./... と npm run build/lint が通過し、上記4点を含む自動テストがあり、mainにpush済み",
+      "resolution": null,
+      "refs": [],
+      "threads": [],
+      "createdAt": "2026-10-29T01:21:17.483Z",
+      "updatedAt": "2026-10-29T01:21:17.483Z",
+      "closedAt": null,
+      "extra": {}
+    },
+    {
+      "id": "redesign-mockup-b",
+      "number": 26,
+      "kind": "task",
+      "title": "B: 画面作り直しの静的モック(本物の規模で)",
+      "status": "ready",
+      "parent": "b",
+      "dependsOn": [
+        "regression-fix-a"
+      ],
+      "milestone": null,
+      "priority": "normal",
+      "labels": [],
+      "body": "Aのpush後に着手。人に見せる用(本物名入り)はgitignore対象の作業フォルダに静的HTML/画像として作成し、公開リポジトリには社内の名前を入れない版のみ入れる。本物の規模(ノード23・Sakuteiリソース34・wave 12/19/3)で中身を埋める。見せたいこと: (1)一目で分かる要約1-2行 (2)網+役割でまとめた構成図(線が見える、ずれ/停止だけ目立つ色) (3)種類と対象ノードでまとめた依存(開けば中身、問題のあるものを前に)。ノード一覧や生JSONは詳細欄に下げる。開発者向け/デモ向けの見せ方の違いも案に含める。見本の「ずらす」はSakutei管理対象を直接変え、「直す」はSakuteiの収束待ち(差し込み口は戻さない)で/eventsで追えることが分かるようにする。実装はしない。完了したらパスと見どころをタイガマネージャーへ報告し、人の判断を待つ。",
+      "doneWhen": "モックのパス・見どころをタイガマネージャーへ報告済みで、人の判断待ちの状態になっている",
+      "resolution": null,
+      "refs": [],
+      "threads": [],
+      "createdAt": "2026-10-29T01:21:17.483Z",
+      "updatedAt": "2026-10-29T01:21:17.483Z",
+      "closedAt": null,
+      "extra": {}
     }
   ]
 }
