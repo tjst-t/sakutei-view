@@ -382,10 +382,14 @@ func (a *Aggregator) fetchTopology(ctx context.Context) containerlab.Topology {
 
 // fetchSakuteiStatus polls Sakutei's /status with a bounded deadline.
 // Returns nil if Sakutei is not configured, hasn't observed reality yet, or
-// is unreachable with no prior successful read to fall back to.
-func (a *Aggregator) fetchSakuteiStatus(ctx context.Context) *sakutei.StatusResponse {
+// is unreachable with no prior successful read to fall back to. The second
+// return value is the poll's own error (nil for "not configured",
+// "hasn't observed reality yet", and success alike) -- see
+// recordSakuteiHealth for why this is not recorded into Health directly
+// here.
+func (a *Aggregator) fetchSakuteiStatus(ctx context.Context) (*sakutei.StatusResponse, error) {
 	if a.Sakutei == nil {
-		return nil
+		return nil, nil
 	}
 
 	reqCtx, cancel := context.WithTimeout(ctx, a.requestTimeout())
@@ -394,37 +398,31 @@ func (a *Aggregator) fetchSakuteiStatus(ctx context.Context) *sakutei.StatusResp
 	status, err := a.Sakutei.Status(reqCtx)
 	switch {
 	case err == nil:
-		a.recordSuccess(SourceSakutei)
 		cp := status
 		a.mu.Lock()
 		a.cachedSakutei = &cp
 		a.mu.Unlock()
-		return &status
+		return &status, nil
 	case sakutei.NotYet(err):
 		// Daemon just started and answered, but has not finished its first
 		// cycle; this is a normal startup state, not a failure.
-		a.recordSuccess(SourceSakutei)
-		return nil
+		return nil, nil
 	default:
-		a.recordError(SourceSakutei, err)
 		a.mu.Lock()
 		defer a.mu.Unlock()
-		return a.cachedSakutei
+		return a.cachedSakutei, err
 	}
 }
 
 // fetchSakuteiPlan polls Sakutei's /plan with a bounded deadline. Returns
 // nil if Sakutei is not configured, hasn't observed reality yet, or is
-// unreachable with no prior successful read to fall back to.
-//
-// This shares SourceSakutei's health entry with fetchSakuteiStatus and
-// fetchSakuteiGraph (all three read the same daemon); when they disagree
-// within one Snapshot call, the last one polled wins. In practice they
-// either all succeed or all fail together, since they hit the same
-// read-only listener.
-func (a *Aggregator) fetchSakuteiPlan(ctx context.Context) *sakutei.PlanResponse {
+// unreachable with no prior successful read to fall back to. See
+// fetchSakuteiStatus for the second return value, and recordSakuteiHealth
+// for how the three Sakutei endpoints' errors are combined into one
+// Health entry.
+func (a *Aggregator) fetchSakuteiPlan(ctx context.Context) (*sakutei.PlanResponse, error) {
 	if a.Sakutei == nil {
-		return nil
+		return nil, nil
 	}
 
 	reqCtx, cancel := context.WithTimeout(ctx, a.requestTimeout())
@@ -433,29 +431,27 @@ func (a *Aggregator) fetchSakuteiPlan(ctx context.Context) *sakutei.PlanResponse
 	plan, err := a.Sakutei.Plan(reqCtx)
 	switch {
 	case err == nil:
-		a.recordSuccess(SourceSakutei)
 		cp := plan
 		a.mu.Lock()
 		a.cachedSakuteiPlan = &cp
 		a.mu.Unlock()
-		return &plan
+		return &plan, nil
 	case sakutei.NotYet(err):
-		a.recordSuccess(SourceSakutei)
-		return nil
+		return nil, nil
 	default:
-		a.recordError(SourceSakutei, err)
 		a.mu.Lock()
 		defer a.mu.Unlock()
-		return a.cachedSakuteiPlan
+		return a.cachedSakuteiPlan, err
 	}
 }
 
 // fetchSakuteiGraph polls Sakutei's /graph with a bounded deadline. Returns
 // nil if Sakutei is not configured, hasn't observed reality yet, or is
-// unreachable with no prior successful read to fall back to.
-func (a *Aggregator) fetchSakuteiGraph(ctx context.Context) *sakutei.GraphResponse {
+// unreachable with no prior successful read to fall back to. See
+// fetchSakuteiStatus for the second return value.
+func (a *Aggregator) fetchSakuteiGraph(ctx context.Context) (*sakutei.GraphResponse, error) {
 	if a.Sakutei == nil {
-		return nil
+		return nil, nil
 	}
 
 	reqCtx, cancel := context.WithTimeout(ctx, a.requestTimeout())
@@ -464,21 +460,43 @@ func (a *Aggregator) fetchSakuteiGraph(ctx context.Context) *sakutei.GraphRespon
 	graph, err := a.Sakutei.Graph(reqCtx)
 	switch {
 	case err == nil:
-		a.recordSuccess(SourceSakutei)
 		cp := graph
 		a.mu.Lock()
 		a.cachedSakuteiGraph = &cp
 		a.mu.Unlock()
-		return &graph
+		return &graph, nil
 	case sakutei.NotYet(err):
-		a.recordSuccess(SourceSakutei)
-		return nil
+		return nil, nil
 	default:
-		a.recordError(SourceSakutei, err)
 		a.mu.Lock()
 		defer a.mu.Unlock()
-		return a.cachedSakuteiGraph
+		return a.cachedSakuteiGraph, err
 	}
+}
+
+// recordSakuteiHealth combines the outcome of this Snapshot's three
+// Sakutei polls (/status, /plan, /graph -- all against the same daemon)
+// into one Health[SourceSakutei] entry. A single endpoint failing marks
+// the whole source unhealthy for this round, even if the other two
+// succeeded: in production, a daemon upgrade can change one endpoint's
+// JSON shape (e.g. a field decodeJSON doesn't recognize) without affecting
+// the others, and showing the source as healthy just because the
+// unaffected endpoints happened to be polled too would hide a real,
+// user-visible failure (stale/missing data from the broken endpoint).
+// Errors are considered in (status, plan, graph) order; the first
+// non-nil one is recorded. Returns immediately, recording nothing, when
+// Sakutei is not configured.
+func (a *Aggregator) recordSakuteiHealth(errs ...error) {
+	if a.Sakutei == nil {
+		return
+	}
+	for _, err := range errs {
+		if err != nil {
+			a.recordError(SourceSakutei, err)
+			return
+		}
+	}
+	a.recordSuccess(SourceSakutei)
 }
 
 // buildStopReasons collects every reason (from /status's per-resource
@@ -624,9 +642,10 @@ func (a *Aggregator) Snapshot(ctx context.Context) (Snapshot, error) {
 	}
 
 	topo := a.fetchTopology(ctx)
-	sakuteiStatus := a.fetchSakuteiStatus(ctx)
-	sakuteiPlan := a.fetchSakuteiPlan(ctx)
-	sakuteiGraph := a.fetchSakuteiGraph(ctx)
+	sakuteiStatus, statusErr := a.fetchSakuteiStatus(ctx)
+	sakuteiPlan, planErr := a.fetchSakuteiPlan(ctx)
+	sakuteiGraph, graphErr := a.fetchSakuteiGraph(ctx)
+	a.recordSakuteiHealth(statusErr, planErr, graphErr)
 	pluginStatus := a.fetchPluginStatus(ctx)
 
 	nodes := make([]Node, len(topo.Nodes))

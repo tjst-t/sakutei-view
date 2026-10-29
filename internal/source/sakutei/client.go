@@ -3,8 +3,10 @@ package sakutei
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"strings"
 )
@@ -90,10 +92,23 @@ func decodeJSON[T any](resp *http.Response, path string) (T, error) {
 	}
 
 	var v T
-	if err := json.NewDecoder(resp.Body).Decode(&v); err != nil {
-		return zero, fmt.Errorf("sakutei: GET %s: decoding response: %w", path, err)
+	err := json.NewDecoder(resp.Body).Decode(&v)
+	if err == nil {
+		return v, nil
 	}
-	return v, nil
+
+	var typeErr *json.UnmarshalTypeError
+	if errors.As(err, &typeErr) {
+		// One field's JSON value had a shape sakutei-view doesn't recognize
+		// for its Go type (e.g. a Sakutei version change). encoding/json
+		// skips that field and decodes every other field as usual, so v is
+		// still usable -- do not throw the whole response away over one
+		// unrecognized field.
+		log.Printf("sakutei: GET %s: field %q has an unexpected shape (want %s), ignoring it: %v",
+			path, typeErr.Field, typeErr.Type, typeErr)
+		return v, nil
+	}
+	return zero, fmt.Errorf("sakutei: GET %s: decoding response: %w", path, err)
 }
 
 // Status calls GET /status.

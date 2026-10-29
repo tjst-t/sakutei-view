@@ -29,7 +29,8 @@ const statusFixture = `{
     {"id": "fake/site=a/web", "provider": "fake", "scope": {"site": "a"}, "local_id": "web", "state": "conformant"},
     {"id": "fake/site=a/storage01", "provider": "fake", "scope": {"site": "a"}, "local_id": "storage01",
      "state": "drift", "cause": "C", "fields": [{"field": "lun_count", "from": "6", "to": "4"}],
-     "diagnostic": "lun_count differs"}
+     "diagnostic": "lun_count differs",
+     "tier": {"true_observe": true, "list": true, "bulk_observe": false, "pruneable": true, "provider_version": "1.4.0"}}
   ],
   "daemon": {
     "cycle": 42, "consecutive_unreachable_skips": 0, "unreachable_skip_limit": 5,
@@ -104,8 +105,71 @@ func TestClient_Status(t *testing.T) {
 	if drifted.State != "drift" || len(drifted.Fields) != 1 || drifted.Fields[0].Field != "lun_count" {
 		t.Fatalf("unexpected drifted resource: %+v", drifted)
 	}
+	if drifted.Tier == nil || !drifted.Tier.TrueObserve || drifted.Tier.BulkObserve || drifted.Tier.ProviderVersion != "1.4.0" {
+		t.Fatalf("unexpected tier: %+v", drifted.Tier)
+	}
 	if status.Daemon == nil || status.Daemon.Interval != "10s" {
 		t.Fatalf("unexpected daemon health: %+v", status.Daemon)
+	}
+}
+
+// statusFixtureUnknownTierShape is statusFixture's drifted resource, but
+// with "tier" in the shape a previous (buggy) version of this package
+// itself declared -- a bare string -- instead of the object Sakutei v2.6.0
+// actually sends. It stands in for "any future field whose JSON shape this
+// package's Go type doesn't expect" (a daemon upgrade, a field this package
+// hasn't caught up to yet, ...): decodeJSON must not throw away the whole
+// response over it.
+const statusFixtureUnknownTierShape = `{
+  "schema_version": 1,
+  "generated_at": "2026-10-27T08:18:54Z",
+  "complete": true,
+  "cycle": 42,
+  "cycle_time": "2026-10-27T08:18:50Z",
+  "last_cycle": 42,
+  "summary": {
+    "conformant": 3, "drift": 1, "missing": 0, "unobservable": 0,
+    "unmanaged": 0, "workflow": 0, "oscillating": 0, "list_errors": 0, "total": 4
+  },
+  "resources": [
+    {"id": "fake/site=a/web", "provider": "fake", "scope": {"site": "a"}, "local_id": "web", "state": "conformant"},
+    {"id": "fake/site=a/storage01", "provider": "fake", "scope": {"site": "a"}, "local_id": "storage01",
+     "state": "drift", "cause": "C", "fields": [{"field": "lun_count", "from": "6", "to": "4"}],
+     "diagnostic": "lun_count differs", "tier": "full"}
+  ]
+}`
+
+func TestClient_Status_UnknownFieldShapeDoesNotFailWholeDecode(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(statusFixtureUnknownTierShape))
+	}))
+	defer srv.Close()
+
+	c := NewClient(srv.URL, srv.Client())
+	status, err := c.Status(context.Background())
+	if err != nil {
+		t.Fatalf("Status: %v (an unrecognized field shape must not fail the whole decode)", err)
+	}
+	if status.Cycle != 42 || status.Summary.Total != 4 {
+		t.Fatalf("sibling top-level fields were lost: %+v", status)
+	}
+	if len(status.Resources) != 2 {
+		t.Fatalf("sibling array elements were lost: %+v", status.Resources)
+	}
+	drifted := status.Resources[1]
+	if drifted.State != "drift" || drifted.Diagnostic != "lun_count differs" || len(drifted.Fields) != 1 {
+		t.Fatalf("sibling fields on the same resource were lost: %+v", drifted)
+	}
+	// encoding/json allocates the pointer for a struct-pointer field before
+	// attempting to decode into it, so Tier ends up non-nil but every field
+	// left at its zero value -- it does not get the chance to be populated,
+	// but it also must not be some mangled partial value.
+	if drifted.Tier == nil {
+		t.Fatal("expected Tier to be allocated (zero-valued), got nil")
+	}
+	if *drifted.Tier != (Tier{}) {
+		t.Fatalf("expected Tier to be left zero-valued, got: %+v", drifted.Tier)
 	}
 }
 

@@ -88,6 +88,20 @@ type ApplyStopped struct {
 	Since              string `json:"since,omitempty"`
 }
 
+// Tier is a resource's provider's Capabilities tier (docs/status-json.md's
+// "provider 階級"), present on drifted resources. Sakutei v2 reports this
+// as an object, not a plain string -- a previous version of this struct
+// declared Tier as a bare string, which made every /status response that
+// included a drifted resource fail to decode. See
+// sakutei's internal/statusreport.JSONTier (docs/status-json.md's tier row).
+type Tier struct {
+	TrueObserve     bool   `json:"true_observe"`
+	List            bool   `json:"list"`
+	BulkObserve     bool   `json:"bulk_observe"`
+	Pruneable       bool   `json:"pruneable"`
+	ProviderVersion string `json:"provider_version"`
+}
+
 // ResourceStatus is one element of StatusResponse.Resources.
 type ResourceStatus struct {
 	ID       string            `json:"id"`
@@ -103,7 +117,7 @@ type ResourceStatus struct {
 	Fields        []FieldDiff   `json:"fields,omitempty"`
 	Diagnostic    string        `json:"diagnostic,omitempty"`
 	LastSeen      string        `json:"last_seen,omitempty"`
-	Tier          string        `json:"tier,omitempty"`
+	Tier          *Tier         `json:"tier,omitempty"`
 	ObserveError  string        `json:"observe_error,omitempty"`
 	Workflow      string        `json:"workflow,omitempty"`
 	WorkflowStage string        `json:"workflow_stage,omitempty"`

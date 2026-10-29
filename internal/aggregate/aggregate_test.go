@@ -514,6 +514,78 @@ func TestAggregator_Snapshot_SakuteiBindingPluginWithoutBindingsField(t *testing
 	}
 }
 
+// TestAggregator_Snapshot_HealthReflectsAnySakuteiEndpointFailing is the
+// regression test for a bug where sakutei-view's three independent polls of
+// Sakutei (/status, /plan, /graph) each wrote to the same
+// Health[SourceSakutei] entry: whichever one ran last always won, so a
+// failing /status could be silently masked by a succeeding /plan or /graph
+// polled afterwards within the same Snapshot call. Health must reflect the
+// failure even though two of the three endpoints succeeded.
+func TestAggregator_Snapshot_HealthReflectsAnySakuteiEndpointFailing(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /status", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(`{"error": "boom"}`))
+	})
+	mux.HandleFunc("GET /plan", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(sakuteiPlanFixture))
+	})
+	mux.HandleFunc("GET /graph", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(sakuteiGraphFixture))
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	cl := mockContainerlabSource{topo: containerlab.Topology{
+		Nodes: []containerlab.Node{{Name: "leaf1", State: "running"}, {Name: "spine1", State: "running"}},
+	}}
+	agg := New(cl, sakutei.NewClient(srv.URL, nil), nil)
+
+	snap, err := agg.Snapshot(context.Background())
+	if err != nil {
+		t.Fatalf("Snapshot: %v", err)
+	}
+
+	// /plan and /graph still succeeded, so their data should be present...
+	if len(snap.SakuteiStopReasons) == 0 {
+		t.Errorf("SakuteiStopReasons = %+v, want the budget/prune halts from the successful /plan poll", snap.SakuteiStopReasons)
+	}
+	if snap.SakuteiGraph == nil {
+		t.Errorf("SakuteiGraph = nil, want the successful /graph poll's data")
+	}
+	// ...but /status failed, so Health must show Sakutei as failed overall,
+	// not OK just because the other two endpoints answered.
+	h := snap.Health[SourceSakutei]
+	if !h.Configured {
+		t.Fatalf("Health[sakutei].Configured = false, want true")
+	}
+	if h.OK {
+		t.Errorf("Health[sakutei].OK = true, want false: /status failed even though /plan and /graph succeeded")
+	}
+	if h.LastError == "" {
+		t.Errorf("Health[sakutei].LastError is empty, want the /status failure's message")
+	}
+}
+
+// TestAggregator_Snapshot_HealthOKWhenAllSakuteiEndpointsSucceed is the
+// positive-case companion to
+// TestAggregator_Snapshot_HealthReflectsAnySakuteiEndpointFailing: when all
+// three Sakutei polls succeed, Health must show Sakutei as OK.
+func TestAggregator_Snapshot_HealthOKWhenAllSakuteiEndpointsSucceed(t *testing.T) {
+	agg := newTestAggregator(t)
+
+	snap, err := agg.Snapshot(context.Background())
+	if err != nil {
+		t.Fatalf("Snapshot: %v", err)
+	}
+	h := snap.Health[SourceSakutei]
+	if !h.Configured || !h.OK || h.LastError != "" {
+		t.Errorf("Health[sakutei] = %+v, want Configured=true OK=true LastError=\"\"", h)
+	}
+}
+
 func TestAggregator_Snapshot_SakuteiNotYet(t *testing.T) {
 	sakuteiSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
