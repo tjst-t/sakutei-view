@@ -16,6 +16,9 @@ web/dist/
 examples/demo/zone.db
 examples/demo/ruleset.conf
 examples/demo/redfish/secrets.json
+examples/demo/.run/
+examples/demo/.*.clab.yml.bak
+examples/demo/clab-*/
 
 # OS
 .DS_Store

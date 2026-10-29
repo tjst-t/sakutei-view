@@ -1,12 +1,13 @@
-# Reference-only --redfish-config for the sakutei-view demo (optional,
-# NOT part of the verified disturb/fix path -- see examples/demo/README.md).
+# --redfish-config for the sakutei-view demo (optional -- the base
+# dnszone/nftables path works without it).
 #
 # Modeled on the real schema documented in Sakutei's own
-# docs/providers/redfish.md (github.com/tjst-t/sakutei, tag v2.6.0).
-# Not exercised against a real BMC in this repository's own development:
-# this environment has no containerlab/KVM to bring up the qemu-bmc node
-# in examples/demo/topology.clab.yml, so this file has not itself been
-# used with `sakutei plan --redfish-config examples/demo/redfish/bmcs.yaml`.
+# docs/providers/redfish.md (github.com/tjst-t/sakutei, tag v2.6.0), and
+# exercised for real against the qemu-bmc node in
+# examples/demo/topology.clab.yml once deployed: the real Sakutei v2.6.0
+# binary used this file with `-redfish-config` to plan and reconcile
+# redfish-system//server01 (Off -> On, boot override disabled) against the
+# qemu-bmc's actual Redfish endpoint. See examples/demo/README.md.
 #
 # address below matches server01's mgmt-ipv4 in examples/demo/topology.clab.yml.
 # qemu-bmc's Redfish endpoint uses a self-signed certificate, hence

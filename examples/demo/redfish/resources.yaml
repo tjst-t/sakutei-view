@@ -1,13 +1,16 @@
-# Reference-only Sakutei intent fragment for the optional redfish-system
-# resource in the sakutei-view demo. NOT verified against a real BMC in
-# this repository's own development (see examples/demo/README.md) -- this
-# environment has no containerlab/KVM to run examples/demo/topology.clab.yml's
-# qemu-bmc node, so this fragment has not itself been planned/reconciled.
+# Sakutei intent fragment for the optional redfish-system resource in the
+# sakutei-view demo. Verified for real in this repository's own
+# development: deployed examples/demo/topology.clab.yml, then ran the real
+# Sakutei v2.6.0 binary with --redfish-config examples/demo/redfish/bmcs.yaml
+# against this fragment -- plan showed the power On + boot_enabled change,
+# reconcile applied it against the qemu-bmc node's real Redfish endpoint,
+# and a follow-up plan reported Converged. See examples/demo/README.md.
 #
-# To try it for real: deploy examples/demo/topology.clab.yml, then run
-# Sakutei with both --intent pointed at a directory that includes this
-# file (merge it into examples/demo/sakutei/intent/, or point at a
-# separate intent dir and pass --redfish-config examples/demo/redfish/bmcs.yaml).
+# To try it yourself: deploy examples/demo/topology.clab.yml, then run
+# Sakutei with --intent pointed at a directory that includes this file
+# (merge it into examples/demo/sakutei/intent/, or point at a separate
+# intent dir) and --redfish-config examples/demo/redfish/bmcs.yaml --
+# examples/demo/run-demo.sh does this automatically when REDFISH_CONFIG is set.
 resources:
   - provider: redfish-system
     id: server01

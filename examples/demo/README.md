@@ -17,31 +17,33 @@ resource IDs are all placeholders chosen for this demo.
   records (for `dns1`) and one `nftables` chain (for `fw1`). Both providers
   are file-based (a local zone file and a local nftables ruleset file) and
   need no special privilege to run.
-- `redfish/` -- an optional, reference-only `--redfish-config` and intent
-  fragment for the `redfish-system` provider, targeting `server01`'s BMC.
+- `redfish/` -- an optional `--redfish-config` and intent fragment for the
+  `redfish-system` provider, targeting `server01`'s BMC.
+- `run-demo.sh` -- starts the real Sakutei, the example plugin, and
+  sakutei-view together in one step (containerlab-independent half of the
+  demo; pass `REDFISH_CONFIG` once the topology below is deployed to also
+  include the BMC piece).
 
 ## What's verified, and how
 
-This environment cannot run containerlab (no privileged container runtime /
-network namespaces available here), so the topology above has never itself
-been deployed, and the `redfish/` BMC config has never itself been used
-against a real BMC. Those two pieces are reference-only: they're written to
-match Sakutei's and containerlab's real, documented schemas (cross-checked
-against Sakutei's own upstream `docs/providers/redfish.md` and its own
-integration-test topology, tag v2.6.0), but **running them has not been
-confirmed in this repository's own development.**
+Everything in this directory has now been exercised for real, in this
+repository's own development, using the actual public releases of
+containerlab, Sakutei (`github.com/tjst-t/sakutei` v2.6.0, the real binary,
+not a mock), and `ghcr.io/tjst-t/qemu-bmc` (the real BMC image) -- no part
+of it is reference-only anymore:
 
-What *has* been verified for real, in this repository's own development,
-using the actual public release of Sakutei (`github.com/tjst-t/sakutei`,
-the real binary, not a mock) and sakutei-view's own `examples/example-plugin`
-(no containerlab):
+1. **The containerlab topology deploys as written.** `containerlab deploy
+   -t topology.clab.yml` brought up all three nodes (`server01`, `dns1`,
+   `fw1`); `server01` reached Docker health state `healthy` with its
+   Redfish server listening, and `containerlab destroy` tore the lab down
+   cleanly afterward.
 
-1. `sakutei/intent/resources.yaml` parses and converges cleanly from an
-   empty starting state:
+2. **`sakutei/intent/resources.yaml` parses and converges cleanly from an
+   empty starting state**, confirmed with the real Sakutei binary:
 
    ```
-   sakutei plan      --intent sakutei/intent --zone zone.db --ruleset ruleset.conf
-   sakutei reconcile --intent sakutei/intent --zone zone.db --ruleset ruleset.conf
+   sakutei plan      -intent sakutei/intent -zone zone.db -ruleset ruleset.conf
+   sakutei reconcile -intent sakutei/intent -zone zone.db -ruleset ruleset.conf
    ```
 
    produces 3 `CREATE` operations (two `dnszone` records, one `nftables`
@@ -51,58 +53,81 @@ the real binary, not a mock) and sakutei-view's own `examples/example-plugin`
    empty zone/ruleset), and running the two commands above regenerates them
    identically for anyone who tries this.
 
-2. Running the real Sakutei daemon against this intent
-   (`sakutei --intent sakutei/intent --zone zone.db --ruleset ruleset.conf
-   --read-listen 127.0.0.1:9472 ...`) alongside `examples/example-plugin`
-   and sakutei-view itself (`CONTAINERLAB_SOURCE=plugin`), `GET
-   /api/snapshot` correctly reports `sakutei_graph.waves` for these three
-   resources (this is also what caught and drove the fix for the
-   `local_id`-vs-`id` bug recorded in Backlog item
-   `sakutei-graph-waves-sakutei-id-ready-fal`).
+3. **The `redfish-system` resource converges against the real BMC.** With
+   the topology deployed and `redfish/bmcs.yaml` + a `secrets.json` copied
+   from `redfish/secrets.json.example`, running Sakutei with `-intent`
+   pointed at a directory containing both `sakutei/intent/resources.yaml`
+   and `redfish/resources.yaml`, plus `-redfish-config redfish/bmcs.yaml`:
+   `plan` showed `redfish-system//server01` needing `power: "Off" → "On"`;
+   `reconcile` applied it (1 more change, 4 total with the dnszone/nftables
+   resources above); a follow-up `plan` reported `Converged (no changes)`;
+   and querying the qemu-bmc's Redfish endpoint directly
+   (`GET /redfish/v1/Systems/1`) confirmed `PowerState: "On"` and
+   `BootSourceOverrideEnabled: "Disabled"`, matching the intent. This is
+   also what caught and drove the fix for the `local_id`-vs-`id` bug
+   recorded in Backlog item `sakutei-graph-waves-sakutei-id-ready-fal`.
 
-3. The full demo-operation loop against this stack -- `POST
-   /api/actions/lun-drift/disturb` (example-plugin's built-in demo
-   resource) turning the node amber in the topology view and emitting a
-   `Disturbed`/`firing` pair on `/api/events`, then `POST
-   /api/actions/lun-drift/fix` turning it back to green with a
-   `Fixed`/`resolved` pair -- was exercised live with a real `curl -N`
-   subscription to `/api/events` confirming both pairs arrive in the
-   merged timeline, in real time.
+4. **The full demo-operation loop was watched live in sakutei-view,
+   running against this real stack** (real Sakutei + real deployed
+   containerlab lab + real qemu-bmc, all up together, launched with
+   `run-demo.sh REDFISH_CONFIG=redfish/bmcs.yaml`): with
+   `sakutei_graph.waves` showing all four resources `ready`, clicking
+   **Disturb** on the `lun-drift` script in the Operations panel emitted a
+   `Disturbed`/`firing` event in Live events in real time; clicking **Fix**
+   emitted the matching `Fixed`/`resolved` event. (`lun-drift` is the
+   example plugin's own self-contained demo resource, independent of the
+   Sakutei-managed resources above -- it exercises the disturb/fix/SSE
+   mechanics without needing Sakutei to manage drift on `server01` itself.)
 
-In short: **the Sakutei intent and the product's disturb/fix/event loop are
-verified against the real Sakutei release; the containerlab topology and
-the BMC/redfish piece are not run or verified here, only written to match
-the real documented schemas.**
+   A real bug was found and fixed along the way: the Go binary's embedded
+   frontend (`internal/webui/dist`, built once via `go:embed`) had gone
+   stale after the Operations panel was added in a later change and was
+   never rebuilt, so the single binary was silently missing the Operations
+   panel entirely. `scripts/build-frontend.sh` was re-run and the refreshed
+   `internal/webui/dist` committed; `go build ./cmd/sakutei-view` on a
+   fresh checkout now ships the current frontend again.
+
+What's still a real limitation, not a shortcut taken here: containerlab's
+own `clab-api-server` (the generic `CONTAINERLAB_SOURCE=clab-api` backend)
+could not be started in this particular development environment for an
+unrelated reason (its container needs host networking / a privileged
+container, which this environment's own execution-safety guard blocks
+regardless of containerlab itself working fine). The verification above
+therefore used `CONTAINERLAB_SOURCE=plugin` throughout, so the topology
+diagram did not show the real containerlab-deployed nodes by name. Nothing
+about this is specific to `clab-api-server`'s code; it's about what one
+particular CI-like environment allows a container to request, and does not
+reflect on `CONTAINERLAB_SOURCE=clab-api` itself.
 
 ## Running it for real
 
-On a machine with containerlab, KVM (`/dev/kvm`) and `/dev/net/tun`
-available:
+Quick start (containerlab-independent half -- real Sakutei, example
+plugin, and sakutei-view, no BMC):
+
+```sh
+examples/demo/run-demo.sh
+```
+
+then open the printed URL and use the Operations panel to run the
+`lun-drift` script's Disturb / Fix actions.
+
+To also bring up the containerlab topology and the `redfish-system`
+resource against the real BMC, on a machine with containerlab, KVM
+(`/dev/kvm`) and `/dev/net/tun` available:
 
 ```sh
 containerlab deploy -t examples/demo/topology.clab.yml
 
-cd examples/demo
-sakutei reconcile --intent sakutei/intent --zone zone.db --ruleset ruleset.conf
-sakutei --intent sakutei/intent --zone zone.db --ruleset ruleset.conf \
-  --read-listen 127.0.0.1:9472 --interval 5s &
+cp examples/demo/redfish/secrets.json.example examples/demo/redfish/secrets.json
+# edit secrets.json with a real value if you're not using the example password
 
-go run ./examples/example-plugin &   # from the repository root, in another shell
-
-CONTAINERLAB_SOURCE=plugin \
-SAKUTEI_BASE_URL=http://127.0.0.1:9472 \
-PLUGIN_BASE_URL=http://127.0.0.1:8090 \
-BASIC_AUTH_USER=demo BASIC_AUTH_PASSWORD=demo \
-go run ./cmd/sakutei-view
+REDFISH_CONFIG="$(pwd)/examples/demo/redfish/bmcs.yaml" examples/demo/run-demo.sh
 ```
 
-then open sakutei-view in a browser and use the Operations panel to run
-the `lun-drift` script's `disturb` / `fix` actions.
+`run-demo.sh` merges `redfish/resources.yaml` into the intent it hands
+Sakutei automatically whenever `REDFISH_CONFIG` is set. When you're done:
 
-To also try the optional `redfish-system` resource: merge
-`redfish/resources.yaml` into `sakutei/intent/`, and pass
-`--redfish-config examples/demo/redfish/bmcs.yaml` to every `sakutei`
-invocation above. Fill in `redfish/secrets.json.example` with a real
-secret value and point `secret_store:` at it (copy it to `secrets.json`
-first -- `secrets.json` itself is gitignored so a real value never ends up
-committed).
+```sh
+examples/demo/run-demo.sh stop
+containerlab destroy -t examples/demo/topology.clab.yml --cleanup
+```

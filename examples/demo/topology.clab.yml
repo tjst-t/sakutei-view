@@ -1,10 +1,10 @@
-# Reference-only containerlab topology for the sakutei-view demo.
+# containerlab topology for the sakutei-view demo.
 #
-# NOT executed or verified by this repository's own development process:
-# this environment cannot run containerlab (no network namespaces /
-# privileged container runtime available here), so this file has not
-# itself been started with `containerlab deploy`. See examples/demo/README.md
-# for exactly what was verified instead, and how.
+# Deployed and torn down for real with `containerlab deploy` /
+# `containerlab destroy` as part of this repository's own development
+# (all three nodes reached "running"/"healthy"; server01's Redfish BMC was
+# then driven for real too -- see examples/demo/README.md for exactly what
+# was verified and how).
 #
 # It exists to give the demo a plausible, generic shape -- one small
 # BMC-equipped server plus two simple hosts -- matching the resources in
