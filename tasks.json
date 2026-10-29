@@ -610,7 +610,7 @@
       "number": 26,
       "kind": "task",
       "title": "B: 画面作り直しの静的モック(本物の規模で)",
-      "status": "ready",
+      "status": "in-progress",
       "parent": "b",
       "dependsOn": [
         "regression-fix-a"
@@ -618,13 +618,18 @@
       "milestone": null,
       "priority": "normal",
       "labels": [],
-      "body": "Aのpush後に着手。人に見せる用(本物名入り)はgitignore対象の作業フォルダに静的HTML/画像として作成し、公開リポジトリには社内の名前を入れない版のみ入れる。本物の規模(ノード23・Sakuteiリソース34・wave 12/19/3)で中身を埋める。見せたいこと: (1)一目で分かる要約1-2行 (2)網+役割でまとめた構成図(線が見える、ずれ/停止だけ目立つ色) (3)種類と対象ノードでまとめた依存(開けば中身、問題のあるものを前に)。ノード一覧や生JSONは詳細欄に下げる。開発者向け/デモ向けの見せ方の違いも案に含める。見本の「ずらす」はSakutei管理対象を直接変え、「直す」はSakuteiの収束待ち(差し込み口は戻さない)で/eventsで追えることが分かるようにする。実装はしない。完了したらパスと見どころをタイガマネージャーへ報告し、人の判断を待つ。",
+      "body": "redesign-mockup-b: 静的モック作成完了。\n\n成果物:\n- /home/banto/container-lab-webui/.mockups/redesign-b/index.html(単一の自己完結HTMLファイル、ビルド不要、外部依存なし)\n- /home/banto/container-lab-webui/.mockups/redesign-b/README.md(説明)\n- リポジトリには含めない(.gitignoreに /.mockups/ を追加、コミット6f902e4でpush済み)。ノード/リソース名は実際の使う側の名前ではなく、規模を示すための仮の一般名(fw-edge1、srv01〜08、storage01〜03等)。\n\n規模はタイガマネージャー指定どおり: ノード23台(Edge/Security 2・Core Network 5・Compute 8・Storage 3・Platform Services 5の役割別レーン)、Sakuteiリソース34件、wave別件数0:12/1:19/2:3。\n\n設計判断: 既存のダーク運用コンソール配色(index.css/colors.ts、Memory #155294)は維持し再配色しない(frontend-design skillの観点でも既に非汎用的な選択だったため)。今回は主に情報設計の作り直し+新規の目玉要素1つという整理:\n- 役割別レーンの構成図(問題ノードだけ色がつき、健全ノードは静かな灰色)\n- 種類+対象ノードでまとめ、問題のあるものを前に出す折りたたみ式の依存一覧\n- ノード一覧・生JSONは既定で折りたたまれた下部の詳細ドロワーへ\n- Developer view / Demo view の切り替え\n- 目玉: Operations パネルの wave 進捗バー付き収束可視化。「ずらす」は差し込み口を経由せず実機(対象の設定)を直接書き換え、「直す」は差し込み口には何も書き戻さずSakutei自身がwave順(0→1→2)に収束するのを、2系統(Sakutei/差し込み口)を区別したイベントタイムラインで見せる。\n\n実機確認: browserOpenで開き、Developer/Demo切り替え、ずらす→直すの一連の操作でタイムラインに5件(plugin書き換え→sakutei検知→収束開始→apply→conformant復帰)が正しい順で流れ、wave 0/1/2が順にdoneになることを確認。コンソールエラー0件。詳細ドロワーもノード23件+ヘッダ=24行で展開確認済み。\n\nB の実装はまだ行っていない。タイガマネージャーへパス・見どころを報告し、人の判断待ち。",
       "doneWhen": "モックのパス・見どころをタイガマネージャーへ報告済みで、人の判断待ちの状態になっている",
       "resolution": null,
       "refs": [],
-      "threads": [],
+      "threads": [
+        {
+          "projectId": "81b644b5-62e7-4e30-89f6-7f68ccf39742",
+          "threadId": "81c59ff7-31c9-48fb-ba57-805dbbfcb608"
+        }
+      ],
       "createdAt": "2026-10-29T01:21:17.483Z",
-      "updatedAt": "2026-10-29T01:21:17.483Z",
+      "updatedAt": "2026-10-29T02:02:25.777Z",
       "closedAt": null,
       "extra": {}
     },
