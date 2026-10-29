@@ -156,6 +156,19 @@ deployment picks one data source for containerlab data, not both.
 - `clab_yaml`: the generated `.clab.yml` file's contents, as a plain
   string.
 
+**Secrecy of `inspect`/`clab_yaml`.** A `.clab.yml`'s node definitions can
+carry secrets in their `env` blocks (API tokens, credential keys, SNMP
+community strings, database passwords, ...), since that file is also how
+the deployment configures its own nodes. A plugin SHOULD redact such
+secrets (and any similarly secret-shaped fields) out of `clab_yaml` and
+`inspect` before returning them — sakutei-view has no way to tell a
+legitimate configuration value from a secret on its own. Regardless of
+whether a plugin does this, sakutei-view MUST NOT expose `inspect` or
+`clab_yaml` content (including `env` values) via its own API (`GET
+/api/snapshot`, `GET /api/events`, or anywhere else a browser can reach) —
+it only ever derives link and node-attribute data from them and discards
+everything else, by construction, independent of what a plugin sends.
+
 ## `GET /plugin/status`
 
 The plugin's own view of its device(s)' state — the analogue of
