@@ -557,6 +557,27 @@
       "updatedAt": "2026-10-29T01:06:50.711Z",
       "closedAt": "2026-10-29T01:06:42.432Z",
       "extra": {}
+    },
+    {
+      "id": "b",
+      "number": 24,
+      "kind": "story",
+      "title": "差し戻し: 本物の検証環境でトポロジ/状態結びつけが機能しない件の修正とB案モック",
+      "status": "backlog",
+      "parent": null,
+      "dependsOn": [],
+      "milestone": null,
+      "priority": "high",
+      "labels": [],
+      "body": "タイガマネージャーからの差し戻し。人が本物の検証環境(ノード約20・Sakuteiリソース数十)でsakutei-viewを見て「トポロジーが壊れている。何を見せたいのか分からない」と強い不満。\n\n根本原因(タイガマネージャーが使う側で特定):\n1. ノード名の結びつけ: aggregate.goのbyName[n.Name]がinspectのコンテナ名(clab-<lab>-<node>)で引いているが、差し込み口のresources[].nodeはトポロジのノード名(<node>)。\n2. Sakuteiの結びつけ: overlayがbyName[r.LocalID]で引いているが、LocalIDは\"<node>/<表の族>/<表>/<鎖>\"のような形で、ノード名そのものと一致しない。\n3. リンクが1本も描かれない: pluginsource.goがinspectだけを読み、clab_yamlのlinksを使っていない。\n\nA(不具合修正、先行): 上記3点の修正 + 耐障害性(embedの古さを防ぐ仕組み)。本物JSON見本(タイガマネージャー経由で届く予定)が来たらテストに固定。\nB(作り直しモック、Aの後): 静的HTML/画像のモック。本物の規模(ノード23・Sakuteiリソース34・wave 0/1/2が12/19/3件)で中身を埋める。公開リポジトリには社内の名前を入れず、人に見せる用の本物名入りモックは作業フォルダのgitignore対象フォルダに置く。\n見せたいこと: (1)一目で分かる要約1-2行 (2)網+役割でまとめた構成図 (3)種類と対象ノードでまとめた依存。\nB追加指示: 見本の「ずらす」はSakutei管理対象を直接変える、「直す」はSakutei任せで差し込み口は戻さない。\n\n順番: A→push→報告 → Bのモック作成→パスと見どころを報告 → 人の判断待ち(Bは実装しない)。\n\n報告先: タイガマネージャー(projectId 5f69572e-838f-4203-88b9-e0cc71641d82, threadId e101037e-7461-4d25-9675-cb8d78ad8386)。",
+      "doneWhen": "",
+      "resolution": null,
+      "refs": [],
+      "threads": [],
+      "createdAt": "2026-10-29T01:20:44.184Z",
+      "updatedAt": "2026-10-29T01:20:44.184Z",
+      "closedAt": null,
+      "extra": {}
     }
   ]
 }
