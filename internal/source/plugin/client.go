@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"strings"
 )
@@ -95,10 +96,23 @@ func decodeJSON[T any](resp *http.Response, method, path string, okStatuses ...i
 	}
 
 	var v T
-	if err := json.NewDecoder(resp.Body).Decode(&v); err != nil {
-		return zero, fmt.Errorf("plugin: %s %s: decoding response: %w", method, path, err)
+	err := json.NewDecoder(resp.Body).Decode(&v)
+	if err == nil {
+		return v, nil
 	}
-	return v, nil
+
+	var typeErr *json.UnmarshalTypeError
+	if errors.As(err, &typeErr) {
+		// One field's JSON value had a shape this client doesn't recognize
+		// for its Go type (e.g. a newer/older plugin contract version using a
+		// field differently than expected). encoding/json skips that field
+		// and decodes every other field as usual, so v is still usable --
+		// do not throw the whole response away over one unrecognized field.
+		log.Printf("plugin: %s %s: field %q has an unexpected shape (want %s), ignoring it: %v",
+			method, path, typeErr.Field, typeErr.Type, typeErr)
+		return v, nil
+	}
+	return zero, fmt.Errorf("plugin: %s %s: decoding response: %w", method, path, err)
 }
 
 // Info calls GET /plugin.

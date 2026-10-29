@@ -251,6 +251,17 @@ type Snapshot struct {
 	// SakuteiGraph is Sakutei's dependency graph (GET /graph), nil if no
 	// Sakutei client is configured or it has never answered successfully.
 	SakuteiGraph *SakuteiGraph `json:"sakutei_graph,omitempty"`
+	// SakuteiSources is a device plugin's optional declaration-source
+	// metadata for Sakutei resources (GET /plugin/status's sakutei_sources,
+	// contract v0.4), passed through as-is -- sakutei-view does not
+	// interpret File/Key/Why itself, only displays them. Nil if no plugin is
+	// configured or it reported none.
+	SakuteiSources []plugin.SakuteiSource `json:"sakutei_sources,omitempty"`
+	// PolicySources is a device plugin's optional declaration-source
+	// metadata for boundary-firewall permit rules (GET /plugin/status's
+	// policy_sources, contract v0.4), passed through as-is. Nil if no
+	// plugin is configured or it reported none.
+	PolicySources []plugin.PolicySource `json:"policy_sources,omitempty"`
 	// Health reports, per source, whether it is configured and whether the
 	// most recent read succeeded. See SourceHealth.
 	Health map[SourceName]SourceHealth `json:"health"`
@@ -703,6 +714,8 @@ func (a *Aggregator) Snapshot(ctx context.Context) (Snapshot, error) {
 	}
 
 	if pluginStatus != nil {
+		snap.SakuteiSources = pluginStatus.SakuteiSources
+		snap.PolicySources = pluginStatus.PolicySources
 		for _, r := range pluginStatus.Resources {
 			idx, ok := byName[r.Node]
 			if !ok {

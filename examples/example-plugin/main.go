@@ -1,6 +1,6 @@
 // Command example-plugin is a minimal, dependency-free reference
 // implementation of the sakutei-view device plugin contract (see
-// docs/plugin-contract.md, version 0.3). It serves static/fake data and a
+// docs/plugin-contract.md, version 0.4). It serves static/fake data and a
 // toy "disturb"/"fix" demo script, useful for exercising sakutei-view
 // without any real device behind it.
 //
@@ -25,7 +25,7 @@ import (
 	"time"
 )
 
-const contractVersion = "0.3"
+const contractVersion = "0.4"
 
 // --- state -----------------------------------------------------------------
 
@@ -131,6 +131,34 @@ func (s *server) handleStatus(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"generated_at": time.Now().UTC(),
 		"resources":    list,
+		// sakutei_sources/policy_sources (contract v0.4): optional
+		// declaration-source metadata. This example plugin has no Sakutei
+		// resources or boundary-firewall rules of its own to attribute (it
+		// only reports its own demo-storage-01), so it sends one
+		// illustrative entry of each kind, naming a resource/rule a real
+		// deployment's own Sakutei intent files would define -- a real
+		// plugin would instead report this for the resources/rules it
+		// actually knows the source of.
+		"sakutei_sources": []map[string]any{
+			{
+				"resource_id": "storage/node=demo/storage01/lun-count",
+				"file":        "storage.yml",
+				"key":         "resources[name=storage01]",
+				"why":         "the demo storage array must keep exactly 4 LUNs provisioned",
+			},
+		},
+		"policy_sources": []map[string]any{
+			{
+				"name":  "mgmt-to-storage01-api",
+				"from":  "mgmt",
+				"to":    "storage01",
+				"proto": "tcp",
+				"ports": []int{8081},
+				"file":  "network.yml",
+				"key":   "firewall.rules[name=mgmt-to-storage01-api]",
+				"why":   "sakutei-view's plugin client reaches this example plugin over this port",
+			},
+		},
 	})
 }
 

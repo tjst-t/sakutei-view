@@ -67,6 +67,58 @@ type SakuteiBinding struct {
 	Node       string `json:"node"`
 }
 
+// SakuteiSource is one element of StatusResponse.SakuteiSources (added in
+// contract v0.4): where a Sakutei resource's desired state is declared, so
+// sakutei-view can show not just what Sakutei observed but where that came
+// from and why.
+type SakuteiSource struct {
+	// ResourceID is the Sakutei resource id this entry is about, in the
+	// same id shape SakuteiBinding.ResourceID uses (Sakutei's globally
+	// unique "id", not its per-resource "local_id").
+	ResourceID string `json:"resource_id"`
+	// File is the declaration file this resource's desired state is
+	// written in, or nil if it has none of its own -- see Derived and
+	// DerivedFrom for that case. A nil File should be shown separately,
+	// labeled as not itself a declaration, not hidden.
+	File *string `json:"file"`
+	// Key locates the specific item within File that declares this
+	// resource, e.g. "resources[name=db1]" to address one entry of an
+	// array by a stable field rather than by numeric index (which shifts as
+	// the file is edited). Free-form; sakutei-view does not parse it, only
+	// displays it.
+	Key string `json:"key"`
+	// Why is the human-readable rationale carried alongside the
+	// declaration, or nil if the declaration has none. A nil Why should be
+	// shown as "no rationale recorded" (sakutei-view: 理由の記載なし), not
+	// hidden -- the absence itself is worth surfacing, not papering over.
+	Why *string `json:"why"`
+	// Derived is true when this resource's state is not written directly in
+	// a file of its own (File is then nil) but computed/generated from one
+	// or more other declarations -- see DerivedFrom. Optional; false/absent
+	// means "not derived" (the ordinary case).
+	Derived bool `json:"derived,omitempty"`
+	// DerivedFrom lists what this resource was derived from (file names or
+	// other plugin-chosen identifiers), used when Derived is true and File
+	// is nil. Optional; empty/absent when Derived is false.
+	DerivedFrom []string `json:"derived_from,omitempty"`
+}
+
+// PolicySource is one element of StatusResponse.PolicySources (added in
+// contract v0.4): where one of the boundary firewall's permit rules is
+// declared, and why.
+type PolicySource struct {
+	Name  string `json:"name"`
+	From  string `json:"from"`
+	To    string `json:"to"`
+	Proto string `json:"proto"`
+	Ports []int  `json:"ports"`
+	// File, Key and Why follow the same meaning as SakuteiSource's fields of
+	// the same name, above.
+	File *string `json:"file"`
+	Key  string  `json:"key"`
+	Why  *string `json:"why"`
+}
+
 // StatusResponse is the response of GET /plugin/status.
 type StatusResponse struct {
 	GeneratedAt time.Time  `json:"generated_at"`
@@ -78,6 +130,18 @@ type StatusResponse struct {
 	// from an empty list -- callers fall back to the generic rule for every
 	// resource in that case, same as before this field existed.
 	SakuteiBindings []SakuteiBinding `json:"sakutei_bindings,omitempty"`
+	// SakuteiSources optionally says, for some or all Sakutei resources this
+	// deployment cares about, which declaration file (and which item within
+	// it) their desired state comes from, and why. Added in contract v0.4;
+	// omitted entirely by a v0.1/v0.2/v0.3 plugin, which is indistinguishable
+	// from an empty list -- sakutei-view simply has no source-file
+	// information to show for any resource in that case.
+	SakuteiSources []SakuteiSource `json:"sakutei_sources,omitempty"`
+	// PolicySources optionally says, for some or all of the boundary
+	// firewall's permit rules, which declaration file (and which item
+	// within it) they come from, and why. Added in contract v0.4; same
+	// optionality as SakuteiSources.
+	PolicySources []PolicySource `json:"policy_sources,omitempty"`
 }
 
 // Script is one element of ScriptsResponse.Scripts.

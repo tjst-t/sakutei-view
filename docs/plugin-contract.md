@@ -1,4 +1,4 @@
-# Device plugin contract — v0.3
+# Device plugin contract — v0.4
 
 sakutei-view reads two kinds of data it does not generate itself:
 containerlab's state and Sakutei's state. A third, optional kind — a
@@ -12,14 +12,14 @@ It is versioned independently of sakutei-view itself; a plugin declares
 the contract version it implements, and sakutei-view will refuse to use a
 plugin whose major version it does not understand.
 
-This document describes **0.3**. It is still pre-1.0 and may change in
-backwards-incompatible ways before 1.0, but 0.1, 0.2 and 0.3 are all
+This document describes **0.4**. It is still pre-1.0 and may change in
+backwards-incompatible ways before 1.0, but 0.1 through 0.4 are all
 compatible with each other in practice: every field a later version adds
-is optional, and a sakutei-view that understands 0.3 also understands a
-0.1 or 0.2 plugin's responses (the newer fields simply come back empty).
-A 0.1 or 0.2 plugin needs no changes to keep working; see "Changes in
-v0.3" and "Changes in v0.2" below if you are writing or updating a
-plugin.
+is optional, and a sakutei-view that understands 0.4 also understands a
+0.1, 0.2 or 0.3 plugin's responses (the newer fields simply come back
+empty). A 0.1, 0.2 or 0.3 plugin needs no changes to keep working; see
+"Changes in v0.4", "Changes in v0.3" and "Changes in v0.2" below if you
+are writing or updating a plugin.
 
 ## Conventions
 
@@ -47,6 +47,88 @@ plugin.
   `firing` (something started/is true now) and `resolved` (it stopped/is
   no longer true). This lets sakutei-view merge plugin events and Sakutei
   events into one timeline without special-casing either source.
+
+## Changes in v0.4
+
+- **`GET /plugin/status` gained two optional fields, `sakutei_sources` and
+  `policy_sources`**, letting a plugin say *where* a Sakutei resource's
+  desired state (or one of the boundary firewall's permit rules) is
+  declared, and why -- not just what was observed:
+
+  ```json
+  {
+    "generated_at": "2026-10-28T06:00:00Z",
+    "resources": [],
+    "sakutei_sources": [
+      {
+        "resource_id": "postgresql/node=mgmt/db1/role/app",
+        "file": "postgres.yml",
+        "key": "resources[name=app]",
+        "why": "the application connects to db1 as this role"
+      },
+      {
+        "resource_id": "host-file/node=mgmt/fw1-admin/etc/sakutei/nft-guard.json",
+        "file": null,
+        "key": "",
+        "why": null,
+        "derived": true,
+        "derived_from": ["network.yml"]
+      }
+    ],
+    "policy_sources": [
+      {
+        "name": "mgmt-to-fw1-ssh",
+        "from": "a0",
+        "to": "fw1",
+        "proto": "tcp",
+        "ports": [22],
+        "file": "network.yml",
+        "key": "firewall.rules[name=mgmt-to-fw1-ssh]",
+        "why": "Sakutei reaches fw1 over ssh to keep its rules conformant"
+      }
+    ]
+  }
+  ```
+
+  - `sakutei_sources[]`: one entry per Sakutei resource a plugin has
+    source information for (a plugin need not cover every resource
+    Sakutei reports; resources with no matching entry simply have no
+    source information shown).
+    - `resource_id` (required): the Sakutei resource id this entry is
+      about, in the same id shape `sakutei_bindings[].resource_id` uses.
+    - `file`: the declaration file this resource's desired state is
+      written in, or `null` if it has none of its own (a resource that is
+      instead computed/generated from other declarations -- see
+      `derived`/`derived_from`). sakutei-view shows a `null` `file` as its
+      own, separately labeled case ("not itself a declaration"), not by
+      hiding the entry.
+    - `key`: locates the specific item within `file`, free-form and
+      plugin-chosen -- e.g. `"resources[name=db1]"` to address one
+      entry of an array by a stable field rather than by numeric index
+      (which shifts as the file is edited). sakutei-view displays `key`
+      as-is; it does not parse or validate it.
+    - `why`: the human-readable rationale carried alongside the
+      declaration, or `null` if the declaration has none. sakutei-view
+      shows a `null` `why` as "no rationale recorded", not by hiding it --
+      the absence itself is worth surfacing.
+    - `derived` (optional, default `false`): `true` when this resource's
+      state is not written directly in a file of its own (`file` is then
+      `null`) but computed/generated from one or more other declarations.
+    - `derived_from` (optional): when `derived` is `true` and `file` is
+      `null`, what this resource was derived from (file names or other
+      plugin-chosen identifiers).
+  - `policy_sources[]`: one entry per boundary-firewall permit rule a
+    plugin has source information for. `name`/`from`/`to`/`proto`/`ports`
+    identify the rule itself (free-form strings/numbers, plugin-chosen,
+    matched by sakutei-view to whatever it already knows about the rule
+    by `name`); `file`/`key`/`why` mean exactly what they mean for
+    `sakutei_sources` above.
+
+  Both fields are entirely optional and independent of each other; a
+  plugin that has no source information to offer (for either or both)
+  can omit the field (or send an empty array), and sakutei-view then
+  simply shows no source information for any resource/rule, exactly as a
+  v0.1/v0.2/v0.3 plugin's responses are already understood.
 
 ## Changes in v0.3
 
@@ -122,14 +204,14 @@ a configured plugin.
 
 ```json
 {
-  "version": "0.3",
+  "version": "0.4",
   "name": "example-plugin",
   "capabilities": ["topology", "status", "scripts", "events"]
 }
 ```
 
 - `version`: the contract version this plugin implements (e.g. `"0.1"`,
-  `"0.2"` or `"0.3"`).
+  `"0.2"`, `"0.3"` or `"0.4"`).
 - `capabilities`: which of the optional endpoint groups below are
   implemented. `status` and `events` are expected from essentially every
   plugin; `topology` and `scripts` are optional (a plugin that only adds
@@ -207,6 +289,10 @@ Sakutei's `/status` for things Sakutei does not itself model.
 - `sakutei_bindings` (optional, added in v0.3): explicit Sakutei
   resource-id-to-node overrides — see "Changes in v0.3" above. Omit
   entirely (or send an empty array) if not needed.
+- `sakutei_sources` / `policy_sources` (optional, added in v0.4):
+  declaration-source metadata for Sakutei resources and boundary-firewall
+  permit rules, respectively — see "Changes in v0.4" above. Omit entirely
+  (or send an empty array) if not needed.
 
 ## `GET /plugin/scripts` (optional — `capabilities: ["scripts"]`)
 

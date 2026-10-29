@@ -245,6 +245,69 @@ func TestAggregator_Snapshot_LinksNeverNull(t *testing.T) {
 	}
 }
 
+// TestAggregator_Snapshot_SakuteiSourcesAndPolicySources verifies that a
+// plugin's optional sakutei_sources/policy_sources (contract v0.4) are
+// passed through into the Snapshot as-is, and that both are simply absent
+// (nil, not empty-non-nil) when the plugin's response has neither field --
+// matching a pre-v0.4 plugin's responses.
+func TestAggregator_Snapshot_SakuteiSourcesAndPolicySources(t *testing.T) {
+	pluginMux := http.NewServeMux()
+	pluginMux.HandleFunc("GET /plugin/status", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{
+			"generated_at": "2026-10-28T00:00:00Z",
+			"resources": [],
+			"sakutei_sources": [
+				{"resource_id": "res-1", "file": "network.yml", "key": "resources[name=res-1]", "why": "reachability"}
+			],
+			"policy_sources": [
+				{"name": "rule-1", "from": "a0", "to": "fw1", "proto": "tcp", "ports": [22], "file": "network.yml", "key": "firewall.rules[name=rule-1]", "why": "ssh mgmt"}
+			]
+		}`))
+	})
+	pluginSrv := httptest.NewServer(pluginMux)
+	defer pluginSrv.Close()
+
+	cl := mockContainerlabSource{topo: containerlab.Topology{
+		Nodes: []containerlab.Node{{Name: "solo", State: "running"}},
+	}}
+	agg := New(cl, nil, plugin.NewClient(pluginSrv.URL, nil))
+
+	snap, err := agg.Snapshot(context.Background())
+	if err != nil {
+		t.Fatalf("Snapshot: %v", err)
+	}
+	if len(snap.SakuteiSources) != 1 || snap.SakuteiSources[0].ResourceID != "res-1" {
+		t.Fatalf("SakuteiSources = %+v, want one entry with ResourceID=res-1", snap.SakuteiSources)
+	}
+	if snap.SakuteiSources[0].File == nil || *snap.SakuteiSources[0].File != "network.yml" {
+		t.Errorf("SakuteiSources[0].File = %v, want \"network.yml\"", snap.SakuteiSources[0].File)
+	}
+	if len(snap.PolicySources) != 1 || snap.PolicySources[0].Name != "rule-1" {
+		t.Fatalf("PolicySources = %+v, want one entry named rule-1", snap.PolicySources)
+	}
+
+	// Absent entirely, as a pre-v0.4 plugin would send.
+	pluginMuxOld := http.NewServeMux()
+	pluginMuxOld.HandleFunc("GET /plugin/status", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"generated_at": "2026-10-28T00:00:00Z", "resources": []}`))
+	})
+	pluginSrvOld := httptest.NewServer(pluginMuxOld)
+	defer pluginSrvOld.Close()
+	aggOld := New(cl, nil, plugin.NewClient(pluginSrvOld.URL, nil))
+	snapOld, err := aggOld.Snapshot(context.Background())
+	if err != nil {
+		t.Fatalf("Snapshot (old plugin): %v", err)
+	}
+	if snapOld.SakuteiSources != nil {
+		t.Errorf("SakuteiSources = %+v, want nil for a pre-v0.4 plugin response", snapOld.SakuteiSources)
+	}
+	if snapOld.PolicySources != nil {
+		t.Errorf("PolicySources = %+v, want nil for a pre-v0.4 plugin response", snapOld.PolicySources)
+	}
+}
+
 func TestAggregator_Snapshot_NoOptionalSources(t *testing.T) {
 	cl := mockContainerlabSource{topo: containerlab.Topology{
 		Nodes: []containerlab.Node{{Name: "solo", State: "running"}},

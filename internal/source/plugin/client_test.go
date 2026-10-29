@@ -92,6 +92,96 @@ func TestStatusResponse_SakuteiBindingsV03AndV02Compat(t *testing.T) {
 	}
 }
 
+func TestStatusResponse_SakuteiSourcesAndPolicySourcesV04(t *testing.T) {
+	// v0.4: both fields present, including the derived (file=null) and
+	// why=null cases a UI must still show (not hide).
+	var withSources StatusResponse
+	if err := json.Unmarshal([]byte(`{
+		"generated_at": "2026-10-28T06:00:00Z",
+		"resources": [],
+		"sakutei_sources": [
+			{"resource_id": "res-1", "file": "network.yml", "key": "resources[name=res-1]", "why": "reachability"},
+			{"resource_id": "res-2", "file": null, "key": "", "why": null, "derived": true, "derived_from": ["network.yml"]}
+		],
+		"policy_sources": [
+			{"name": "rule-1", "from": "a0", "to": "fw1", "proto": "tcp", "ports": [22], "file": "network.yml", "key": "firewall.rules[name=rule-1]", "why": "ssh mgmt"}
+		]
+	}`), &withSources); err != nil {
+		t.Fatalf("Unmarshal (v0.4 with sources): %v", err)
+	}
+	if len(withSources.SakuteiSources) != 2 {
+		t.Fatalf("SakuteiSources = %+v, want 2 entries", withSources.SakuteiSources)
+	}
+	s0 := withSources.SakuteiSources[0]
+	if s0.ResourceID != "res-1" || s0.File == nil || *s0.File != "network.yml" || s0.Key != "resources[name=res-1]" || s0.Why == nil || *s0.Why != "reachability" {
+		t.Errorf("unexpected SakuteiSources[0]: %+v", s0)
+	}
+	s1 := withSources.SakuteiSources[1]
+	if s1.ResourceID != "res-2" || s1.File != nil || s1.Why != nil || !s1.Derived || len(s1.DerivedFrom) != 1 || s1.DerivedFrom[0] != "network.yml" {
+		t.Errorf("unexpected SakuteiSources[1] (derived, file=null, why=null): %+v", s1)
+	}
+	if len(withSources.PolicySources) != 1 {
+		t.Fatalf("PolicySources = %+v, want 1 entry", withSources.PolicySources)
+	}
+	p0 := withSources.PolicySources[0]
+	if p0.Name != "rule-1" || p0.From != "a0" || p0.To != "fw1" || p0.Proto != "tcp" || len(p0.Ports) != 1 || p0.Ports[0] != 22 || p0.File == nil || *p0.File != "network.yml" || p0.Why == nil || *p0.Why != "ssh mgmt" {
+		t.Errorf("unexpected PolicySources[0]: %+v", p0)
+	}
+
+	// v0.1/v0.2/v0.3: neither field present at all. Must decode to nil (not
+	// empty-non-nil) slices, and every other field must decode normally --
+	// this is the "field absent" half of the required coverage.
+	var noSources StatusResponse
+	if err := json.Unmarshal([]byte(`{
+		"generated_at": "2026-10-28T06:00:00Z",
+		"resources": [{"id": "demo-01", "kind": "storage", "label": "Demo", "state": "ok", "node": "node01"}]
+	}`), &noSources); err != nil {
+		t.Fatalf("Unmarshal (no sources): %v", err)
+	}
+	if noSources.SakuteiSources != nil {
+		t.Errorf("SakuteiSources = %+v, want nil when the field is absent", noSources.SakuteiSources)
+	}
+	if noSources.PolicySources != nil {
+		t.Errorf("PolicySources = %+v, want nil when the field is absent", noSources.PolicySources)
+	}
+	if len(noSources.Resources) != 1 || noSources.Resources[0].ID != "demo-01" {
+		t.Errorf("unexpected Resources decode: %+v", noSources.Resources)
+	}
+}
+
+// TestClient_Status_TypeMismatchedFieldDoesNotBreakOthers is the v0.4
+// analogue of the resilience the sakutei client already has: if
+// sakutei_sources (or any one field) comes back in a shape this client
+// doesn't recognize -- e.g. a future/buggy plugin sending "ports" as a
+// string instead of an array of numbers inside policy_sources -- the rest
+// of StatusResponse (including Resources, which has nothing to do with the
+// malformed field) must still decode, via Client.Status rather than a bare
+// json.Unmarshal, to exercise decodeJSON's partial-decode tolerance.
+func TestClient_Status_TypeMismatchedFieldDoesNotBreakOthers(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /plugin/status", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{
+			"generated_at": "2026-10-28T06:00:00Z",
+			"resources": [{"id": "demo-01", "kind": "storage", "label": "Demo", "state": "ok", "node": "node01"}],
+			"policy_sources": [
+				{"name": "rule-1", "from": "a0", "to": "fw1", "proto": "tcp", "ports": "not-an-array", "file": "network.yml", "key": "x", "why": null}
+			]
+		}`)
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	c := NewClient(srv.URL, srv.Client())
+	status, err := c.Status(context.Background())
+	if err != nil {
+		t.Fatalf("Status: %v, want the malformed policy_sources[0].ports field to be skipped rather than failing the whole decode", err)
+	}
+	if len(status.Resources) != 1 || status.Resources[0].ID != "demo-01" {
+		t.Errorf("Resources = %+v, want the unrelated field to still decode correctly", status.Resources)
+	}
+}
+
 func TestClient_RunAction_AcceptedAndConflict(t *testing.T) {
 	var runInProgress bool
 	mux := http.NewServeMux()
